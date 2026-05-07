@@ -251,7 +251,12 @@ def scrape_property(url):
 
     return result
 
+import time
 app = Flask(__name__)
+
+# Cache-busting: minden Flask indításkor új verzió → böngésző letölti a friss JS/CSS-t
+_STATIC_VERSION = str(int(time.time()))
+app.jinja_env.globals['static_ver'] = _STATIC_VERSION
 
 ALLOWED_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp', 'gif'}
 
