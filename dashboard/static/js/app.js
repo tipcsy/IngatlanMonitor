@@ -301,38 +301,51 @@ function initFilters() {
  * Open edit modal for an existing property (reuses addPropertyModal)
  */
 function openEditModal(id) {
-    $.getJSON(`/api/properties/${id}`, function(data) {
-        propertyModalMode = 'edit';
-        propertyEditId = id;
+    $.ajax({
+        url: '/api/properties/' + id,
+        method: 'GET',
+        success: function(data) {
+            try {
+                propertyModalMode = 'edit';
+                propertyEditId = id;
 
-        // Cím és gomb frissítése
-        $('#addPropertyModalTitle').html('<i class="bi bi-pencil"></i> Ingatlan szerkesztése');
-        $('#btn-save-add').removeClass('btn-success').addClass('btn-primary').html('<i class="bi bi-check-lg"></i> Mentés');
+                $('#addPropertyModalTitle').html('<i class="bi bi-pencil"></i> Ingatlan szerkesztése');
+                $('#btn-save-add').removeClass('btn-success').addClass('btn-primary')
+                    .html('<i class="bi bi-check-lg"></i> Mentés');
 
-        // URL szekció elrejtése szerkesztés módban
-        $('#add-url').val('');
-        setFetchStatus('', '');
+                $('#add-url').val('');
+                setFetchStatus('', '');
 
-        // Mezők feltöltése
-        $('#add-portal').val(data.portal || 'egyéb');
-        $('#add-city').val(data.city || '');
-        $('#add-property-url').val(data.property_url || '');
-        $('#add-price').val(data.price_eur || '');
-        $('#add-size').val(data.size_m2 || '');
-        $('#add-garden-m2').val(data.garden_m2 || '');
-        $('#add-sea-km').val(data.sea_km || '');
-        $('#add-parking').val(data.parking || 'ismeretlen');
-        $('#add-garden').val(data.garden || 'ismeretlen');
-        $('#add-airport').val(data.airport || '');
-        $('#add-airport-km').val(data.airport_km || '');
-        $('#add-score').val(data.score || '');
-        $('#add-legal').val(data.legal_status || 'ok');
-        $('#add-reason').val(data.reason || '');
-        $('#add-notes').val(data.user_notes || '');
-        $('#add-lat').val(data.latitude || '');
-        $('#add-lon').val(data.longitude || '');
+                $('#add-portal').val(data.portal || 'egyéb');
+                $('#add-city').val(data.city || '');
+                $('#add-property-url').val(data.property_url || '');
+                $('#add-price').val(data.price_eur !== null ? data.price_eur : '');
+                $('#add-size').val(data.size_m2 !== null ? data.size_m2 : '');
+                $('#add-garden-m2').val(data.garden_m2 !== null ? data.garden_m2 : '');
+                $('#add-sea-km').val(data.sea_km !== null ? data.sea_km : '');
+                $('#add-parking').val(data.parking || 'ismeretlen');
+                $('#add-garden').val(data.garden || 'ismeretlen');
+                $('#add-airport').val(data.airport || '');
+                $('#add-airport-km').val(data.airport_km !== null ? data.airport_km : '');
+                $('#add-score').val(data.score !== null ? data.score : '');
+                $('#add-legal').val(data.legal_status || 'ok');
+                $('#add-reason').val(data.reason || '');
+                $('#add-notes').val(data.user_notes || '');
+                $('#add-lat').val(data.latitude !== null ? data.latitude : '');
+                $('#add-lon').val(data.longitude !== null ? data.longitude : '');
 
-        bootstrap.Modal.getOrCreateInstance(document.getElementById('addPropertyModal')).show();
+                bootstrap.Modal.getOrCreateInstance(
+                    document.getElementById('addPropertyModal')
+                ).show();
+            } catch (err) {
+                alert('Hiba a szerkesztő megnyitásakor: ' + err.message);
+                console.error('openEditModal error:', err);
+            }
+        },
+        error: function(xhr) {
+            alert('Nem sikerült betölteni az ingatlan adatait. (HTTP ' + xhr.status + ')');
+            console.error('openEditModal AJAX error:', xhr.status, xhr.responseText);
+        }
     });
 }
 
