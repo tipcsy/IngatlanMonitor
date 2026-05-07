@@ -254,7 +254,8 @@ function initDataTable() {
         toggleFavorite(id);
     });
 
-    $('#properties-table').on('click', '.btn-edit', function() {
+    $('#properties-table').on('click', '.btn-edit', function(e) {
+        e.stopPropagation();
         const id = $(this).data('id');
         openEditModal(id);
     });
@@ -334,9 +335,11 @@ function openEditModal(id) {
                 $('#add-lat').val(data.latitude !== null ? data.latitude : '');
                 $('#add-lon').val(data.longitude !== null ? data.longitude : '');
 
-                bootstrap.Modal.getOrCreateInstance(
-                    document.getElementById('addPropertyModal')
-                ).show();
+                setTimeout(function() {
+                    bootstrap.Modal.getOrCreateInstance(
+                        document.getElementById('addPropertyModal')
+                    ).show();
+                }, 0);
             } catch (err) {
                 alert('Hiba a szerkesztő megnyitásakor: ' + err.message);
                 console.error('openEditModal error:', err);
