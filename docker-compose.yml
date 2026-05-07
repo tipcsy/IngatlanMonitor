@@ -1,0 +1,55 @@
+services:
+  ingatlan:
+    image: ingatlan-watcher:latest
+    build:
+      context: ./gmail-watcher
+      dockerfile: Dockerfile
+    container_name: ix-ingatlan
+    volumes:
+      - ./gmail-watcher/.env:/app/ingatlan/.env:ro
+      - ./gmail-watcher/client_secret.json:/app/ingatlan/client_secret.json:ro
+      - ./RULES.md:/app/RULES.md:ro
+      - ./gmail-watcher/token.pickle:/app/ingatlan/token.pickle
+      - ./gmail-watcher/state.json:/app/ingatlan/state.json
+    restart: "no"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  simple-check:
+    image: ingatlan-watcher:latest
+    container_name: ix-simple-check
+    volumes:
+      - ./gmail-watcher/.env:/app/ingatlan/.env:ro
+      - ./gmail-watcher/client_secret.json:/app/ingatlan/client_secret.json:ro
+      - ./RULES.md:/app/RULES.md:ro
+      - ./gmail-watcher/token.pickle:/app/ingatlan/token.pickle
+      - ./gmail-watcher/state.json:/app/ingatlan/state.json
+    restart: "no"
+    command: ["simple_check.py"]
+
+  detailed-check:
+    image: ingatlan-watcher:latest
+    container_name: ix-detailed-check
+    volumes:
+      - ./gmail-watcher/.env:/app/ingatlan/.env:ro
+      - ./gmail-watcher/client_secret.json:/app/ingatlan/client_secret.json:ro
+      - ./RULES.md:/app/RULES.md:ro
+      - ./gmail-watcher/token.pickle:/app/ingatlan/token.pickle
+      - ./gmail-watcher/state.json:/app/ingatlan/state.json
+    restart: "no"
+    command: ["detailed_check.py"]
+
+  debug-24h:
+    image: ingatlan-watcher:latest
+    container_name: ix-debug-24h
+    volumes:
+      - ./gmail-watcher/.env:/app/ingatlan/.env:ro
+      - ./gmail-watcher/client_secret.json:/app/ingatlan/client_secret.json:ro
+      - ./RULES.md:/app/RULES.md:ro
+      - ./gmail-watcher/token.pickle:/app/ingatlan/token.pickle
+      - ./gmail-watcher/state.json:/app/ingatlan/state.json
+    restart: "no"
+    command: ["debug_24h.py"]

@@ -1,0 +1,57 @@
+# Szenzitív fájlok - NE commit-álj!
+# Secrets és API kulcsok
+gmail-watcher/.env
+gmail-watcher/client_secret.json
+gmail-watcher/client_secret_new.json
+gmail-watcher/client_secret_service.json
+gmail-watcher/token.pickle
+gmail-watcher/state_old*.json
+gmail-watcher/state_old*
+
+# State fájl (feldolgozott email ID-k)
+gmail-watcher/state.json
+
+# Output és log fájlok (requirements.txt kivételével)
+gmail-watcher/output*.txt
+gmail-watcher/check_output.txt
+gmail-watcher/debug_output.txt
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Docker
+.dockerignore

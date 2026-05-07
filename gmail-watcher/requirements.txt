@@ -1,0 +1,10 @@
+# Ingatlan Program Python Függőségek
+# Telepítés: pip install -r requirements.txt
+
+# Google Workspace API
+google-auth-oauthlib>=1.0.0
+google-api-python-client>=2.80.0
+
+# További lehetséges függőségek (jövõre)
+# requests>=2.28.0  # HTTP requestekhez
+# python-dotenv>=1.0.0  # .env fájl betöltéshez (opcionális)
