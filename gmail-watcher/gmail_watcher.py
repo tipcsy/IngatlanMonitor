@@ -665,19 +665,18 @@ def process_message(details):
         email_id = details.get("id")
         gmail_url = f"https://mail.google.com/mail/u/0/#inbox/{email_id}" if email_id else ""
 
-        # 5+ pontos ingatlanokat mentjük az adatbázisba
-        if score >= 5:
-            try:
-                save_property(
-                    email_id=email_id,
-                    email_date=details.get("date", ""),
-                    portal=identify_portal(details["sender"]),
-                    prop=prop,
-                    property_url=matched_link,
-                    gmail_url=gmail_url,
-                )
-            except Exception as e:
-                print(f"  [DB] Mentési hiba: {e}")
+        # Minden értékelt ingatlant mentjük az adatbázisba
+        try:
+            save_property(
+                email_id=email_id,
+                email_date=details.get("date", ""),
+                portal=identify_portal(details["sender"]),
+                prop=prop,
+                property_url=matched_link,
+                gmail_url=gmail_url,
+            )
+        except Exception as e:
+            print(f"  [DB] Mentési hiba: {e}")
 
         if score >= 7:
             msg = format_telegram_message(details, prop)
