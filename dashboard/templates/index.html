@@ -106,6 +106,7 @@
         <table id="properties-table" class="table table-striped table-hover" style="width:100%">
             <thead>
                 <tr>
+                    <th>Kép</th>
                     <th>Pont</th>
                     <th>Város</th>
                     <th>Ár (EUR)</th>
@@ -265,6 +266,15 @@
                         <label class="form-label">Saját megjegyzés</label>
                         <textarea class="form-control form-control-sm" id="add-notes" rows="2"
                             placeholder="Személyes jegyzetek..."></textarea>
+                    </div>
+
+                    <!-- Sor 7: Kép -->
+                    <div class="col-12">
+                        <label class="form-label"><i class="bi bi-image"></i> Kép feltöltése</label>
+                        <div id="add-image-preview" class="mb-2"></div>
+                        <input type="file" class="form-control form-control-sm" id="add-image-file"
+                            accept="image/jpeg,image/png,image/webp,image/gif">
+                        <div class="form-text">JPG, PNG, WEBP — max. 5 MB. Mentés után töltődik fel.</div>
                     </div>
                 </div>
 

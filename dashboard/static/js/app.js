@@ -66,6 +66,15 @@ function initDataTable() {
             }
         },
         columns: [
+            // Image thumbnail
+            {
+                data: 'image_path',
+                orderable: false,
+                render: function(data) {
+                    if (!data) return '<i class="bi bi-image text-muted" style="font-size:1.4rem;opacity:0.25"></i>';
+                    return `<img src="/images/${data}" style="height:48px;width:60px;object-fit:cover;border-radius:4px;cursor:pointer" class="prop-thumbnail" title="Kép megtekintése">`;
+                }
+            },
             // Score
             {
                 data: 'score',
@@ -223,7 +232,7 @@ function initDataTable() {
                 }
             }
         ],
-        order: [[0, 'desc']], // Score descending
+        order: [[1, 'desc']], // Score descending (0. oszlop = kép, nem rendezhető)
         pageLength: 25,
         lengthMenu: [10, 25, 50, 100],
         language: {
@@ -334,6 +343,15 @@ function openEditModal(id) {
                 $('#add-notes').val(data.user_notes || '');
                 $('#add-lat').val(data.latitude !== null ? data.latitude : '');
                 $('#add-lon').val(data.longitude !== null ? data.longitude : '');
+
+                // Kép előnézet
+                const preview = $('#add-image-preview');
+                $('#add-image-file').val('');
+                if (data.image_path) {
+                    preview.html(`<img src="/images/${data.image_path}" style="height:80px;border-radius:6px;object-fit:cover" class="me-2"><small class="text-muted">Új fájl választásával cseréled</small>`);
+                } else {
+                    preview.html('<small class="text-muted">Még nincs kép feltöltve</small>');
+                }
 
                 setTimeout(function() {
                     bootstrap.Modal.getOrCreateInstance(
@@ -447,6 +465,8 @@ function resetAddForm() {
     $('#add-garden').val('ismeretlen');
     $('#add-airport').val('');
     $('#add-legal').val('ok');
+    $('#add-image-file').val('');
+    $('#add-image-preview').html('');
     setFetchStatus('', '');
 }
 
@@ -578,10 +598,29 @@ function saveNewProperty() {
         method: ajaxMethod,
         contentType: 'application/json',
         data: JSON.stringify(payload),
-        success: function() {
-            bootstrap.Modal.getOrCreateInstance(document.getElementById('addPropertyModal')).hide();
-            table.ajax.reload(null, false);
-            loadStats();
+        success: function(resp) {
+            const savedId = resp.id || propertyEditId;
+            const imageFile = $('#add-image-file')[0].files[0];
+            if (imageFile && savedId) {
+                const formData = new FormData();
+                formData.append('image', imageFile);
+                $.ajax({
+                    url: '/api/properties/' + savedId + '/image',
+                    method: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    complete: function() {
+                        bootstrap.Modal.getOrCreateInstance(document.getElementById('addPropertyModal')).hide();
+                        table.ajax.reload(null, false);
+                        loadStats();
+                    }
+                });
+            } else {
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('addPropertyModal')).hide();
+                table.ajax.reload(null, false);
+                loadStats();
+            }
         },
         error: function(xhr) {
             const msg = xhr.responseJSON ? xhr.responseJSON.error : 'Ismeretlen hiba';

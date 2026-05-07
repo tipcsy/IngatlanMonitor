@@ -13,8 +13,8 @@ import urllib.request
 import uuid
 from datetime import datetime
 
-from flask import Flask, render_template, jsonify, request
-from config import DATABASE, REGIONS, AIRPORT_NAMES
+from flask import Flask, render_template, jsonify, request, send_from_directory
+from config import DATABASE, REGIONS, AIRPORT_NAMES, IMAGES_DIR
 
 try:
     import requests as req_lib
@@ -253,12 +253,28 @@ def scrape_property(url):
 
 app = Flask(__name__)
 
+ALLOWED_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp', 'gif'}
+
+
+def migrate_db():
+    """Új oszlopok hozzáadása ha még nem léteznek."""
+    conn = sqlite3.connect(str(DATABASE))
+    try:
+        conn.execute("ALTER TABLE properties ADD COLUMN image_path TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # már létezik
+    conn.close()
+
 
 def get_db():
     """SQLite kapcsolat létrehozása."""
     conn = sqlite3.connect(str(DATABASE))
     conn.row_factory = sqlite3.Row
     return conn
+
+
+migrate_db()
 
 
 @app.route("/")
@@ -296,13 +312,15 @@ def api_properties():
     order_column_idx = request.args.get("order[0][column]", 0, type=int)
     order_dir = request.args.get("order[0][dir]", "desc")
 
-    # Oszlop mapping (DataTables index → SQL oszlop)
+    # Oszlop mapping (DataTables index → SQL oszlop), 0. = kép (nem rendezhető)
     columns = [
+        None,
         "score", "city", "price_eur", "size_m2", "sea_km",
         "airport", "airport_km", "parking", "garden", "garden_m2",
         "legal_status", "reason", "user_notes", "property_url", "email_date", "id"
     ]
-    order_column = columns[order_column_idx] if order_column_idx < len(columns) else "score"
+    col = columns[order_column_idx] if order_column_idx < len(columns) else None
+    order_column = col if col else "score"
 
     # Alap WHERE feltétel
     where_clauses = []
@@ -358,7 +376,7 @@ def api_properties():
         SELECT id, email_id, email_date, portal, city, region, airport, airport_km,
                sea_km, latitude, longitude, price_eur, size_m2, parking, garden,
                score, legal_status, reason, property_url, gmail_url, maps_url,
-               is_archived, is_favorite, garden_m2, user_notes
+               is_archived, is_favorite, garden_m2, user_notes, image_path
         FROM properties
         WHERE {where_sql}
         ORDER BY {order_column} {order_dir}
@@ -396,6 +414,7 @@ def api_properties():
             "is_favorite": row["is_favorite"],
             "garden_m2": row["garden_m2"],
             "user_notes": row["user_notes"],
+            "image_path": row["image_path"],
         })
 
     conn.close()
@@ -649,6 +668,47 @@ def api_create_property():
         conn.close()
 
     return jsonify({"success": True, "id": new_id}), 201
+
+
+@app.route("/api/properties/<int:prop_id>/image", methods=["POST"])
+def api_upload_image(prop_id):
+    """Kép feltöltése egy ingatlanhoz."""
+    if "image" not in request.files:
+        return jsonify({"error": "Nincs kép a kérésben"}), 400
+
+    file = request.files["image"]
+    if not file.filename:
+        return jsonify({"error": "Üres fájlnév"}), 400
+
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        return jsonify({"error": f"Nem engedélyezett formátum: {ext}"}), 400
+
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"{prop_id}_{uuid.uuid4().hex[:8]}.{ext}"
+    file.save(str(IMAGES_DIR / filename))
+
+    # Régi kép törlése (ha volt)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT image_path FROM properties WHERE id = ?", (prop_id,))
+    row = cursor.fetchone()
+    if row and row["image_path"]:
+        old_file = IMAGES_DIR / row["image_path"]
+        if old_file.exists():
+            old_file.unlink()
+
+    cursor.execute("UPDATE properties SET image_path = ? WHERE id = ?", (filename, prop_id))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"success": True, "image_path": filename})
+
+
+@app.route("/images/<path:filename>")
+def serve_image(filename):
+    """Feltöltött képek kiszolgálása."""
+    return send_from_directory(str(IMAGES_DIR), filename)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ from pathlib import Path
 # Lokálisan: ../data/ingatlan.db
 DATA_DIR = Path(os.environ.get("DATA_DIR", Path(__file__).parent.parent / "data"))
 DATABASE = DATA_DIR / "ingatlan.db"
+IMAGES_DIR = DATA_DIR / "images"
 
 # Flask konfiguráció
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
