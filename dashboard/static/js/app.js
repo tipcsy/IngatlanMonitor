@@ -332,7 +332,7 @@ function openEditModal(id) {
         $('#add-lat').val(data.latitude || '');
         $('#add-lon').val(data.longitude || '');
 
-        $('#addPropertyModal').modal('show');
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('addPropertyModal')).show();
     });
 }
 
@@ -377,7 +377,7 @@ function initAddPropertyModal() {
         propertyModalMode = 'add';
         propertyEditId = null;
         resetAddForm();
-        $('#addPropertyModal').modal('show');
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('addPropertyModal')).show();
     });
 
     // Modal bezárásakor visszaállítás "add" módba
@@ -563,7 +563,7 @@ function saveNewProperty() {
         contentType: 'application/json',
         data: JSON.stringify(payload),
         success: function() {
-            $('#addPropertyModal').modal('hide');
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('addPropertyModal')).hide();
             table.ajax.reload(null, false);
             loadStats();
         },
