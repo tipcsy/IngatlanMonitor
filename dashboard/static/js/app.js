@@ -610,7 +610,14 @@ function saveNewProperty() {
                     data: formData,
                     processData: false,
                     contentType: false,
-                    complete: function() {
+                    success: function() {
+                        bootstrap.Modal.getOrCreateInstance(document.getElementById('addPropertyModal')).hide();
+                        table.ajax.reload(null, false);
+                        loadStats();
+                    },
+                    error: function(xhr) {
+                        const msg = xhr.responseJSON ? xhr.responseJSON.error : ('HTTP ' + xhr.status);
+                        alert('Képfeltöltés sikertelen: ' + msg + '\n\nAz ingatlan adatai mentve, csak a kép nem töltődött fel.');
                         bootstrap.Modal.getOrCreateInstance(document.getElementById('addPropertyModal')).hide();
                         table.ajax.reload(null, false);
                         loadStats();
