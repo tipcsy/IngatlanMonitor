@@ -11,6 +11,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . /app/ingatlan
 
+# RULES.md a konténer gyökerébe kell (BASE_DIR.parent = /app)
+RUN cp /app/ingatlan/RULES.md /app/RULES.md
+
 # Cron job: 30 percenként fut
 RUN echo "*/30 * * * * root cd /app/ingatlan && python gmail_watcher.py >> /var/log/cron.log 2>&1" \
     > /etc/cron.d/ingatlan \

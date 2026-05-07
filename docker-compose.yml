@@ -11,7 +11,6 @@ services:
       OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:cloud}
     volumes:
-      - ./RULES.md:/app/RULES.md:ro
       - /mnt/truenas_share/Program_Files/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
       - /mnt/truenas_share/Program_Files/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
       - /mnt/truenas_share/Program_Files/ingatlan-data/state.json:/app/ingatlan/state.json
@@ -33,7 +32,6 @@ services:
       OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:cloud}
     volumes:
-      - ./RULES.md:/app/RULES.md:ro
       - /mnt/truenas_share/Program_Files/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
       - /mnt/truenas_share/Program_Files/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
       - /mnt/truenas_share/Program_Files/ingatlan-data/state.json:/app/ingatlan/state.json
@@ -51,7 +49,6 @@ services:
       OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:cloud}
     volumes:
-      - ./RULES.md:/app/RULES.md:ro
       - /mnt/truenas_share/Program_Files/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
       - /mnt/truenas_share/Program_Files/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
       - /mnt/truenas_share/Program_Files/ingatlan-data/state.json:/app/ingatlan/state.json
@@ -69,7 +66,6 @@ services:
       OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:cloud}
     volumes:
-      - ./RULES.md:/app/RULES.md:ro
       - /mnt/truenas_share/Program_Files/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
       - /mnt/truenas_share/Program_Files/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
       - /mnt/truenas_share/Program_Files/ingatlan-data/state.json:/app/ingatlan/state.json
