@@ -1,5 +1,9 @@
 FROM python:3.11-slim
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends cron \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app/ingatlan
 
 COPY requirements.txt ./
@@ -7,8 +11,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . /app/ingatlan
 
+# Cron job: 30 percenként fut
+RUN echo "*/30 * * * * root cd /app/ingatlan && python gmail_watcher.py >> /var/log/cron.log 2>&1" \
+    > /etc/cron.d/ingatlan \
+    && chmod 0644 /etc/cron.d/ingatlan
+
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["gmail_watcher.py"]

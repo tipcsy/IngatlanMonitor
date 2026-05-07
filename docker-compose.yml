@@ -1,55 +1,80 @@
 services:
   ingatlan:
-    image: ingatlan-watcher:latest
     build:
       context: ./gmail-watcher
       dockerfile: Dockerfile
+    image: ingatlan-watcher:latest
     container_name: ix-ingatlan
+    environment:
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:cloud}
     volumes:
-      - ./gmail-watcher/.env:/app/ingatlan/.env:ro
-      - ./gmail-watcher/client_secret.json:/app/ingatlan/client_secret.json:ro
+      # Szabályok a repóból
       - ./RULES.md:/app/RULES.md:ro
-      - ./gmail-watcher/token.pickle:/app/ingatlan/token.pickle
-      - ./gmail-watcher/state.json:/app/ingatlan/state.json
-    restart: "no"
+      # Érzékeny fájlok a VM-ről (nem a repóból!)
+      - /opt/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
+      - /opt/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
+      - /opt/ingatlan-data/state.json:/app/ingatlan/state.json
+    restart: unless-stopped
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
+  # Debug service-ek — csak explicit indításra (docker compose --profile debug run ...)
   simple-check:
+    profiles: ["debug"]
     image: ingatlan-watcher:latest
     container_name: ix-simple-check
+    environment:
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:cloud}
     volumes:
-      - ./gmail-watcher/.env:/app/ingatlan/.env:ro
-      - ./gmail-watcher/client_secret.json:/app/ingatlan/client_secret.json:ro
       - ./RULES.md:/app/RULES.md:ro
-      - ./gmail-watcher/token.pickle:/app/ingatlan/token.pickle
-      - ./gmail-watcher/state.json:/app/ingatlan/state.json
+      - /opt/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
+      - /opt/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
+      - /opt/ingatlan-data/state.json:/app/ingatlan/state.json
     restart: "no"
+    entrypoint: ["python"]
     command: ["simple_check.py"]
 
   detailed-check:
+    profiles: ["debug"]
     image: ingatlan-watcher:latest
     container_name: ix-detailed-check
+    environment:
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:cloud}
     volumes:
-      - ./gmail-watcher/.env:/app/ingatlan/.env:ro
-      - ./gmail-watcher/client_secret.json:/app/ingatlan/client_secret.json:ro
       - ./RULES.md:/app/RULES.md:ro
-      - ./gmail-watcher/token.pickle:/app/ingatlan/token.pickle
-      - ./gmail-watcher/state.json:/app/ingatlan/state.json
+      - /opt/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
+      - /opt/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
+      - /opt/ingatlan-data/state.json:/app/ingatlan/state.json
     restart: "no"
+    entrypoint: ["python"]
     command: ["detailed_check.py"]
 
   debug-24h:
+    profiles: ["debug"]
     image: ingatlan-watcher:latest
     container_name: ix-debug-24h
+    environment:
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:cloud}
     volumes:
-      - ./gmail-watcher/.env:/app/ingatlan/.env:ro
-      - ./gmail-watcher/client_secret.json:/app/ingatlan/client_secret.json:ro
       - ./RULES.md:/app/RULES.md:ro
-      - ./gmail-watcher/token.pickle:/app/ingatlan/token.pickle
-      - ./gmail-watcher/state.json:/app/ingatlan/state.json
+      - /opt/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
+      - /opt/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
+      - /opt/ingatlan-data/state.json:/app/ingatlan/state.json
     restart: "no"
+    entrypoint: ["python"]
     command: ["debug_24h.py"]
