@@ -455,16 +455,31 @@ def api_get_property(prop_id):
 
 @app.route("/api/properties/<int:prop_id>", methods=["PUT"])
 def api_update_property(prop_id):
-    """Ingatlan szerkesztése (garden_m2, user_notes)."""
+    """Ingatlan szerkesztése (összes mező)."""
     data = request.get_json()
     if not data:
         return jsonify({"error": "No data"}), 400
 
-    allowed_fields = {"garden_m2", "user_notes"}
+    allowed_fields = {
+        "portal", "city", "price_eur", "size_m2", "sea_km",
+        "parking", "garden", "garden_m2", "airport", "airport_km",
+        "latitude", "longitude", "score", "legal_status",
+        "reason", "property_url", "user_notes",
+    }
     updates = {k: v for k, v in data.items() if k in allowed_fields}
 
     if not updates:
         return jsonify({"error": "No valid fields"}), 400
+
+    # Region újraszámítás ha reptér változott
+    if "airport" in updates:
+        updates["region"] = REGIONS.get(updates["airport"] or "", "Egyéb")
+
+    # Maps URL újraszámítás ha koordináta változott
+    lat = updates.get("latitude")
+    lon = updates.get("longitude")
+    if lat is not None and lon is not None:
+        updates["maps_url"] = f"https://www.google.com/maps?q={lat},{lon}" if lat and lon else None
 
     conn = get_db()
     cursor = conn.cursor()

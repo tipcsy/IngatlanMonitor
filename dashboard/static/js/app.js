@@ -14,12 +14,15 @@ const AIRPORT_NAMES = {
 // DataTable instance
 let table;
 
+// Add/Edit modal mode: 'add' | 'edit'
+let propertyModalMode = 'add';
+let propertyEditId = null;
+
 // Initialize on document ready
 $(document).ready(function() {
     loadStats();
     initDataTable();
     initFilters();
-    initEditModal();
     initAddPropertyModal();
 });
 
@@ -295,42 +298,41 @@ function initFilters() {
 }
 
 /**
- * Initialize edit modal
- */
-function initEditModal() {
-    $('#btn-save-edit').on('click', function() {
-        const id = $('#edit-id').val();
-        const data = {
-            garden_m2: parseInt($('#edit-garden-m2').val()) || null,
-            user_notes: $('#edit-notes').val() || null
-        };
-
-        $.ajax({
-            url: `/api/properties/${id}`,
-            method: 'PUT',
-            contentType: 'application/json',
-            data: JSON.stringify(data),
-            success: function() {
-                $('#editModal').modal('hide');
-                table.ajax.reload(null, false);
-            },
-            error: function() {
-                alert('Hiba történt a mentés során!');
-            }
-        });
-    });
-}
-
-/**
- * Open edit modal for a property
+ * Open edit modal for an existing property (reuses addPropertyModal)
  */
 function openEditModal(id) {
     $.getJSON(`/api/properties/${id}`, function(data) {
-        $('#edit-id').val(data.id);
-        $('#edit-city').val(data.city || '');
-        $('#edit-garden-m2').val(data.garden_m2 || '');
-        $('#edit-notes').val(data.user_notes || '');
-        $('#editModal').modal('show');
+        propertyModalMode = 'edit';
+        propertyEditId = id;
+
+        // Cím és gomb frissítése
+        $('#addPropertyModalTitle').html('<i class="bi bi-pencil"></i> Ingatlan szerkesztése');
+        $('#btn-save-add').removeClass('btn-success').addClass('btn-primary').html('<i class="bi bi-check-lg"></i> Mentés');
+
+        // URL szekció elrejtése szerkesztés módban
+        $('#add-url').val('');
+        setFetchStatus('', '');
+
+        // Mezők feltöltése
+        $('#add-portal').val(data.portal || 'egyéb');
+        $('#add-city').val(data.city || '');
+        $('#add-property-url').val(data.property_url || '');
+        $('#add-price').val(data.price_eur || '');
+        $('#add-size').val(data.size_m2 || '');
+        $('#add-garden-m2').val(data.garden_m2 || '');
+        $('#add-sea-km').val(data.sea_km || '');
+        $('#add-parking').val(data.parking || 'ismeretlen');
+        $('#add-garden').val(data.garden || 'ismeretlen');
+        $('#add-airport').val(data.airport || '');
+        $('#add-airport-km').val(data.airport_km || '');
+        $('#add-score').val(data.score || '');
+        $('#add-legal').val(data.legal_status || 'ok');
+        $('#add-reason').val(data.reason || '');
+        $('#add-notes').val(data.user_notes || '');
+        $('#add-lat').val(data.latitude || '');
+        $('#add-lon').val(data.longitude || '');
+
+        $('#addPropertyModal').modal('show');
     });
 }
 
@@ -372,8 +374,18 @@ function renderBool(data) {
 function initAddPropertyModal() {
     // Gomb megnyomása → modal megnyitása + mezők ürítése
     $('#btn-add-property').on('click', function() {
+        propertyModalMode = 'add';
+        propertyEditId = null;
         resetAddForm();
         $('#addPropertyModal').modal('show');
+    });
+
+    // Modal bezárásakor visszaállítás "add" módba
+    $('#addPropertyModal').on('hidden.bs.modal', function() {
+        propertyModalMode = 'add';
+        propertyEditId = null;
+        $('#addPropertyModalTitle').html('<i class="bi bi-plus-circle"></i> Új ingatlan felvétele');
+        $('#btn-save-add').removeClass('btn-primary').addClass('btn-success').html('<i class="bi bi-check-lg"></i> Mentés');
     });
 
     // URL betöltés
@@ -509,7 +521,7 @@ function geocodeCity(city) {
 }
 
 /**
- * Save new property to database
+ * Save property (new or edited)
  */
 function saveNewProperty() {
     const city = $('#add-city').val().trim();
@@ -539,11 +551,15 @@ function saveNewProperty() {
         longitude: parseFloat($('#add-lon').val()) || null,
     };
 
+    const isEdit = propertyModalMode === 'edit';
+    const ajaxUrl = isEdit ? `/api/properties/${propertyEditId}` : '/api/properties';
+    const ajaxMethod = isEdit ? 'PUT' : 'POST';
+
     $('#btn-save-add').prop('disabled', true);
 
     $.ajax({
-        url: '/api/properties',
-        method: 'POST',
+        url: ajaxUrl,
+        method: ajaxMethod,
         contentType: 'application/json',
         data: JSON.stringify(payload),
         success: function() {

@@ -128,12 +128,12 @@
     </div>
 </div>
 
-<!-- Add Property Modal -->
+<!-- Add / Edit Property Modal -->
 <div class="modal fade" id="addPropertyModal" tabindex="-1">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Új ingatlan felvétele</h5>
+                <h5 class="modal-title" id="addPropertyModalTitle"><i class="bi bi-plus-circle"></i> Új ingatlan felvétele</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -273,40 +273,6 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
                 <button type="button" class="btn btn-success" id="btn-save-add">
                     <i class="bi bi-check-lg"></i> Mentés
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Edit Modal -->
-<div class="modal fade" id="editModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-pencil"></i> Ingatlan szerkesztése</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="edit-id">
-                <div class="mb-3">
-                    <label class="form-label">Város</label>
-                    <input type="text" class="form-control" id="edit-city" disabled>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Kert mérete (m²)</label>
-                    <input type="number" class="form-control" id="edit-garden-m2" placeholder="pl. 150">
-                    <div class="form-text">Ha az AI nem tudta megállapítani, itt kitöltheted.</div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Megjegyzés</label>
-                    <textarea class="form-control" id="edit-notes" rows="3" placeholder="Saját jegyzet..."></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
-                <button type="button" class="btn btn-primary" id="btn-save-edit">
-                    <i class="bi bi-check"></i> Mentés
                 </button>
             </div>
         </div>
