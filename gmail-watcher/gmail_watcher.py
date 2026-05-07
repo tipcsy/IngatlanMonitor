@@ -476,8 +476,7 @@ IMPORTANT: Respond ONLY with valid JSON, no extra text:
             data=data,
             headers={"Content-Type": "application/json"}
         )
-        # Timeout növelése: phi3:mini CPU-n lassú, 600 másodperc kell
-        with urllib.request.urlopen(req, timeout=600) as resp:
+        with urllib.request.urlopen(req, timeout=120) as resp:
             result = json.loads(resp.read())
             text = result.get("response", "").strip()
 
