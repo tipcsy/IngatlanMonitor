@@ -289,18 +289,38 @@ def extract_main_city(city_name):
 
 def geocode_city(city_name, country="Spain"):
     """Város koordinátáinak lekérése Nominatim-tól (OpenStreetMap)."""
-    # Először a kinyert városnévvel próbálunk
+    # Valódi település típusok (szigetek, vizek kizárva)
+    GOOD_TYPES = {"city", "town", "village", "hamlet", "municipality", "suburb", "quarter", "neighbourhood"}
+    BAD_TYPES  = {"islet", "island", "water", "bay", "coastline", "cape", "beach"}
     main_city = extract_main_city(city_name)
     for name in [main_city, city_name]:
-        query = urllib.parse.quote(f"{name}, {country}")
-        url   = f"https://nominatim.openstreetmap.org/search?q={query}&format=json&limit=1"
-        req   = urllib.request.Request(url, headers={"User-Agent": "openclaw-ingatlan-watcher/1.0"})
+        query = urllib.parse.quote(name)
+        url   = (
+            f"https://nominatim.openstreetmap.org/search"
+            f"?q={query}&format=json&limit=5&countrycodes=es&addressdetails=0"
+        )
+        req = urllib.request.Request(url, headers={"User-Agent": "openclaw-ingatlan-watcher/1.0"})
         try:
             with urllib.request.urlopen(req, timeout=300) as resp:
                 data = json.loads(resp.read())
-                if data:
-                    print(f"  [Geo] '{name}' → {data[0]['display_name'][:60]}")
-                    return float(data[0]["lat"]), float(data[0]["lon"])
+                if not data:
+                    continue
+                # 1. preferencia: valódi település, nem sziget/víz
+                best = next(
+                    (r for r in data
+                     if r.get("type") in GOOD_TYPES and r.get("type") not in BAD_TYPES),
+                    None
+                )
+                # 2. preferencia: bármi, ami nem sziget/víz
+                if best is None:
+                    best = next(
+                        (r for r in data if r.get("type") not in BAD_TYPES),
+                        None
+                    )
+                if best is None:
+                    continue
+                print(f"  [Geo] '{name}' → {best['display_name'][:70]}")
+                return float(best["lat"]), float(best["lon"])
         except Exception as e:
             print(f"  [Geo] Nominatim hiba ({name}): {e}")
     return None, None
