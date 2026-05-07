@@ -292,8 +292,12 @@ def geocode_city(city_name, country="Spain"):
     # Valódi település típusok (szigetek, vizek kizárva)
     GOOD_TYPES = {"city", "town", "village", "hamlet", "municipality", "suburb", "quarter", "neighbourhood"}
     BAD_TYPES  = {"islet", "island", "water", "bay", "coastline", "cape", "beach"}
-    main_city = extract_main_city(city_name)
-    for name in [main_city, city_name]:
+    # Próbálkozási sorrend: teljes string → első rész (kis falu) → utolsó rész (önkormányzat)
+    parts = [p.strip() for p in city_name.split(",")]
+    candidates = [city_name]
+    if len(parts) > 1:
+        candidates = [city_name, parts[0], parts[-1]]  # "Isla Plana, Cartagena" → mind a három
+    for name in candidates:
         query = urllib.parse.quote(name)
         url   = (
             f"https://nominatim.openstreetmap.org/search"
@@ -421,7 +425,7 @@ Body:
 ## TASK
 1. Identify ALL properties mentioned in this email (could be 1 or more)
 2. For each property provide:
-   - city: city/location name
+   - city: location name — for small villages use "Village, Municipality" format (e.g. "Isla Plana, Cartagena" or "Benahadux, Almería"). For large cities just the city name is fine.
    - price_eur: price as integer (0 if unknown)
    - size_m2: living area in m² as integer (0 if unknown)
    - sea_km: distance to sea in km as number (null if unknown)
