@@ -20,6 +20,7 @@ $(document).ready(function() {
     initDataTable();
     initFilters();
     initEditModal();
+    initAddPropertyModal();
 });
 
 /**
@@ -363,6 +364,201 @@ function renderBool(data) {
         return '<i class="bi bi-x-circle-fill bool-no" title="Nem"></i>';
     }
     return '<i class="bi bi-question-circle bool-unknown" title="Ismeretlen"></i>';
+}
+
+/**
+ * Initialize Add Property modal
+ */
+function initAddPropertyModal() {
+    // Gomb megnyomása → modal megnyitása + mezők ürítése
+    $('#btn-add-property').on('click', function() {
+        resetAddForm();
+        $('#addPropertyModal').modal('show');
+    });
+
+    // URL betöltés
+    $('#btn-fetch-url').on('click', function() {
+        const url = $('#add-url').val().trim();
+        if (!url) {
+            setFetchStatus('Kérlek add meg az URL-t!', 'warning');
+            return;
+        }
+        fetchPropertyFromUrl(url);
+    });
+
+    // Enter az URL mezőben
+    $('#add-url').on('keydown', function(e) {
+        if (e.key === 'Enter') $('#btn-fetch-url').click();
+    });
+
+    // Város geocoding gomb
+    $('#btn-geocode').on('click', function() {
+        const city = $('#add-city').val().trim();
+        if (!city) {
+            setFetchStatus('Kérlek add meg a várost!', 'warning');
+            return;
+        }
+        geocodeCity(city);
+    });
+
+    // Mentés
+    $('#btn-save-add').on('click', saveNewProperty);
+}
+
+/**
+ * Reset add property form to empty state
+ */
+function resetAddForm() {
+    ['add-url', 'add-city', 'add-property-url', 'add-price', 'add-size',
+     'add-garden-m2', 'add-sea-km', 'add-airport-km', 'add-score',
+     'add-reason', 'add-notes', 'add-lat', 'add-lon'].forEach(function(id) {
+        $('#' + id).val('');
+    });
+    $('#add-portal').val('egyéb');
+    $('#add-parking').val('ismeretlen');
+    $('#add-garden').val('ismeretlen');
+    $('#add-airport').val('');
+    $('#add-legal').val('ok');
+    setFetchStatus('', '');
+}
+
+/**
+ * Set fetch status message
+ */
+function setFetchStatus(msg, type) {
+    const el = $('#fetch-status');
+    el.removeClass('text-muted text-success text-danger text-warning');
+    if (type) el.addClass('text-' + type);
+    el.html(msg);
+}
+
+/**
+ * Fetch property data from URL via backend scrape endpoint
+ */
+function fetchPropertyFromUrl(url) {
+    setFetchStatus('<i class="bi bi-hourglass-split"></i> Betöltés...', 'muted');
+    $('#btn-fetch-url').prop('disabled', true);
+
+    $.ajax({
+        url: '/api/scrape',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ url: url }),
+        success: function(data) {
+            fillAddFormFromData(data);
+            if (data.error) {
+                setFetchStatus('<i class="bi bi-exclamation-triangle"></i> Részleges betöltés: ' + escapeHtml(data.error) + ' — töltsd ki a hiányzó mezőket kézzel.', 'warning');
+            } else {
+                setFetchStatus('<i class="bi bi-check-circle"></i> Adatok betöltve — ellenőrizd és egészítsd ki!', 'success');
+            }
+        },
+        error: function(xhr) {
+            const msg = xhr.responseJSON ? xhr.responseJSON.error : 'Ismeretlen hiba';
+            setFetchStatus('<i class="bi bi-x-circle"></i> Hiba: ' + escapeHtml(msg), 'danger');
+        },
+        complete: function() {
+            $('#btn-fetch-url').prop('disabled', false);
+        }
+    });
+}
+
+/**
+ * Fill the add form with scraped data
+ */
+function fillAddFormFromData(data) {
+    if (data.portal) $('#add-portal').val(data.portal);
+    if (data.city) $('#add-city').val(data.city);
+    if (data.property_url) $('#add-property-url').val(data.property_url);
+    if (data.price_eur) $('#add-price').val(data.price_eur);
+    if (data.size_m2) $('#add-size').val(data.size_m2);
+    if (data.sea_km) $('#add-sea-km').val(data.sea_km);
+    if (data.parking && data.parking !== null) $('#add-parking').val(data.parking);
+    if (data.garden && data.garden !== null) $('#add-garden').val(data.garden);
+    if (data.airport) $('#add-airport').val(data.airport);
+    if (data.airport_km) $('#add-airport-km').val(data.airport_km);
+    if (data.latitude) $('#add-lat').val(data.latitude);
+    if (data.longitude) $('#add-lon').val(data.longitude);
+}
+
+/**
+ * Geocode city and fill airport/coords fields
+ */
+function geocodeCity(city) {
+    setFetchStatus('<i class="bi bi-hourglass-split"></i> Koordináták lekérése...', 'muted');
+    $('#btn-geocode').prop('disabled', true);
+
+    $.ajax({
+        url: '/api/geocode',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ city: city }),
+        success: function(data) {
+            $('#add-lat').val(data.latitude);
+            $('#add-lon').val(data.longitude);
+            if (data.airport) $('#add-airport').val(data.airport);
+            if (data.airport_km) $('#add-airport-km').val(data.airport_km);
+            setFetchStatus('<i class="bi bi-check-circle"></i> Koordináták meghatározva: ' + data.airport + ' ' + data.airport_km + ' km', 'success');
+        },
+        error: function() {
+            setFetchStatus('<i class="bi bi-x-circle"></i> Város nem található a geocoding adatbázisban.', 'danger');
+        },
+        complete: function() {
+            $('#btn-geocode').prop('disabled', false);
+        }
+    });
+}
+
+/**
+ * Save new property to database
+ */
+function saveNewProperty() {
+    const city = $('#add-city').val().trim();
+    if (!city) {
+        alert('A város megadása kötelező!');
+        $('#add-city').focus();
+        return;
+    }
+
+    const payload = {
+        portal: $('#add-portal').val(),
+        city: city,
+        property_url: $('#add-property-url').val().trim() || null,
+        price_eur: parseInt($('#add-price').val()) || null,
+        size_m2: parseInt($('#add-size').val()) || null,
+        garden_m2: parseInt($('#add-garden-m2').val()) || null,
+        sea_km: parseInt($('#add-sea-km').val()) || null,
+        parking: $('#add-parking').val(),
+        garden: $('#add-garden').val(),
+        airport: $('#add-airport').val() || null,
+        airport_km: parseInt($('#add-airport-km').val()) || null,
+        score: parseInt($('#add-score').val()) || null,
+        legal_status: $('#add-legal').val(),
+        reason: $('#add-reason').val().trim() || null,
+        user_notes: $('#add-notes').val().trim() || null,
+        latitude: parseFloat($('#add-lat').val()) || null,
+        longitude: parseFloat($('#add-lon').val()) || null,
+    };
+
+    $('#btn-save-add').prop('disabled', true);
+
+    $.ajax({
+        url: '/api/properties',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(payload),
+        success: function() {
+            $('#addPropertyModal').modal('hide');
+            table.ajax.reload(null, false);
+            loadStats();
+        },
+        error: function(xhr) {
+            const msg = xhr.responseJSON ? xhr.responseJSON.error : 'Ismeretlen hiba';
+            alert('Mentési hiba: ' + msg);
+        },
+        complete: function() {
+            $('#btn-save-add').prop('disabled', false);
+        }
+    });
 }
 
 /**

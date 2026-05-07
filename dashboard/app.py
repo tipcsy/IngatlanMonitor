@@ -4,9 +4,252 @@ IngatlanMonitor Dashboard
 Flask alkalmazás az ingatlanok táblázatos megjelenítésére.
 """
 
+import json
+import math
+import re
 import sqlite3
+import urllib.parse
+import urllib.request
+import uuid
+from datetime import datetime
+
 from flask import Flask, render_template, jsonify, request
 from config import DATABASE, REGIONS, AIRPORT_NAMES
+
+try:
+    import requests as req_lib
+    from bs4 import BeautifulSoup
+    SCRAPING_OK = True
+except ImportError:
+    SCRAPING_OK = False
+
+# ── Geo helpers ───────────────────────────────────────────────────────────────
+
+AIRPORTS_COORDS = {
+    "AGP": (36.6749, -4.4990),
+    "ALC": (38.2822, -0.5582),
+    "RMU": (37.8030, -1.1253),
+    "VLC": (39.4893, -0.4816),
+    "BIO": (43.3011, -2.9106),
+}
+
+
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(dlon / 2) ** 2)
+    return round(R * 2 * math.asin(math.sqrt(a)))
+
+
+def find_nearest_airport(lat, lon):
+    best, best_d = None, float("inf")
+    for code, (alat, alon) in AIRPORTS_COORDS.items():
+        d = haversine(lat, lon, alat, alon)
+        if d < best_d:
+            best_d, best = d, code
+    return best, best_d
+
+
+def geocode_city_nominatim(city_name):
+    q = urllib.parse.urlencode({
+        "q": f"{city_name}, Spain",
+        "format": "json",
+        "limit": 3,
+        "addressdetails": 1,
+    })
+    url = f"https://nominatim.openstreetmap.org/search?{q}"
+    req = urllib.request.Request(
+        url, headers={"User-Agent": "IngatlanMonitor/1.0 tipcsy@gmail.com"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            results = json.loads(resp.read())
+            if results:
+                return float(results[0]["lat"]), float(results[0]["lon"])
+    except Exception:
+        pass
+    return None, None
+
+
+def detect_portal(url):
+    u = url.lower()
+    for p in ["idealista.com", "kyero.com", "thinkspain.com", "fotocasa.es"]:
+        if p in u:
+            return p
+    return "egyéb"
+
+
+def scrape_property(url):
+    """Ingatlan adatok kinyerése URL-ből. Visszaad mindent amit sikerül."""
+    result = {
+        "property_url": url,
+        "portal": detect_portal(url),
+        "city": None, "price_eur": None, "size_m2": None,
+        "parking": None, "garden": None,
+        "latitude": None, "longitude": None,
+        "airport": None, "airport_km": None, "sea_km": None,
+        "error": None,
+    }
+
+    if not SCRAPING_OK:
+        result["error"] = "requests/beautifulsoup4 nincs telepítve"
+        return result
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+    }
+
+    try:
+        resp = req_lib.get(url, headers=headers, timeout=15, allow_redirects=True)
+        if resp.status_code != 200:
+            result["error"] = f"HTTP {resp.status_code}"
+            return result
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        # JSON-LD structured data (legjobb forrás)
+        for script in soup.find_all("script", type="application/ld+json"):
+            try:
+                data = json.loads(script.string or "")
+                if isinstance(data, list):
+                    data = data[0] if data else {}
+                # Ár
+                price = None
+                if data.get("offers"):
+                    price = data["offers"].get("price")
+                elif data.get("price"):
+                    price = data["price"]
+                if price and not result["price_eur"]:
+                    try:
+                        result["price_eur"] = int(float(
+                            str(price).replace(",", "").replace(" ", "").replace(".", "")
+                        ))
+                    except Exception:
+                        pass
+                # Város
+                if data.get("address") and not result["city"]:
+                    addr = data["address"]
+                    result["city"] = addr.get("addressLocality") or addr.get("addressRegion")
+                # Méret
+                if data.get("floorSize") and not result["size_m2"]:
+                    try:
+                        result["size_m2"] = int(float(data["floorSize"].get("value", 0)))
+                    except Exception:
+                        pass
+                # Koordináták
+                if data.get("geo") and not result["latitude"]:
+                    try:
+                        lat = float(data["geo"].get("latitude", 0))
+                        lon = float(data["geo"].get("longitude", 0))
+                        if lat and lon:
+                            result["latitude"] = lat
+                            result["longitude"] = lon
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        portal = result["portal"]
+
+        # Portal-specifikus parsing
+        if portal == "idealista.com":
+            if not result["price_eur"]:
+                el = soup.select_one(".info-data-price strong, [itemprop='price']")
+                if el:
+                    m = re.search(r"[\d]+", el.get_text().replace(".", "").replace(",", ""))
+                    if m:
+                        try:
+                            result["price_eur"] = int(m.group())
+                        except Exception:
+                            pass
+            if not result["city"]:
+                bc = soup.select_one("ul.breadcrumb li:last-child, .main-info__title-minor")
+                if bc:
+                    result["city"] = bc.get_text(strip=True)
+            if not result["size_m2"]:
+                for item in soup.select(".info-features span, .details-property-feature-one span"):
+                    m = re.search(r"(\d+)\s*m²", item.get_text(strip=True))
+                    if m:
+                        try:
+                            result["size_m2"] = int(m.group(1))
+                        except Exception:
+                            pass
+                        break
+
+        elif portal == "kyero.com":
+            if not result["price_eur"]:
+                el = soup.select_one(".price, [data-price], h2.price")
+                if el:
+                    m = re.search(r"[\d]+", el.get_text().replace(".", "").replace(",", ""))
+                    if m:
+                        try:
+                            result["price_eur"] = int(m.group())
+                        except Exception:
+                            pass
+            if not result["city"]:
+                el = soup.select_one(".location, [itemprop='addressLocality']")
+                if el:
+                    result["city"] = el.get_text(strip=True)
+
+        elif portal == "thinkspain.com":
+            if not result["price_eur"]:
+                el = soup.select_one(".asking-price, .price-title, h2.price")
+                if el:
+                    m = re.search(r"[\d]+", el.get_text().replace(".", "").replace(",", ""))
+                    if m:
+                        try:
+                            result["price_eur"] = int(m.group())
+                        except Exception:
+                            pass
+
+        elif portal == "fotocasa.es":
+            if not result["price_eur"]:
+                el = soup.select_one(".re-DetailHeader-price, [data-testid='detail-header-price']")
+                if el:
+                    m = re.search(r"[\d]+", el.get_text().replace(".", "").replace(",", ""))
+                    if m:
+                        try:
+                            result["price_eur"] = int(m.group())
+                        except Exception:
+                            pass
+
+        # Fallback: meta description → ár
+        if not result["price_eur"]:
+            desc = soup.find("meta", {"name": "description"})
+            if desc:
+                content = desc.get("content", "").replace(".", "").replace(",", "")
+                m = re.search(r"(\d{4,8})\s*€", content)
+                if m:
+                    try:
+                        result["price_eur"] = int(m.group(1))
+                    except Exception:
+                        pass
+
+        # Fallback: title/og:title → város
+        if not result["city"]:
+            og = soup.find("meta", property="og:title")
+            title = og["content"] if og else (soup.title.string if soup.title else "")
+            if title:
+                m = re.search(
+                    r"\b(?:in|en)\s+([A-ZÁÉÍÓÚÑa-záéíóúñ][A-ZÁÉÍÓÚÑa-záéíóúñ\s]+?)(?:\s*[-|,]|\s*$)",
+                    title,
+                )
+                if m:
+                    result["city"] = m.group(1).strip()
+
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result
 
 app = Flask(__name__)
 
@@ -278,6 +521,119 @@ def api_toggle_archive(prop_id):
     conn.close()
 
     return jsonify({"success": True, "is_archived": new_value})
+
+
+@app.route("/api/scrape", methods=["POST"])
+def api_scrape():
+    """URL-ből ingatlan adatok kinyerése."""
+    data = request.get_json()
+    if not data or not data.get("url"):
+        return jsonify({"error": "URL megadása kötelező"}), 400
+
+    url = data["url"].strip()
+    result = scrape_property(url)
+
+    # Geo számítás koordinátákból vagy városból
+    lat = result.get("latitude")
+    lon = result.get("longitude")
+    if lat and lon:
+        airport, airport_km = find_nearest_airport(lat, lon)
+        result["airport"] = airport
+        result["airport_km"] = airport_km
+    elif result.get("city"):
+        lat, lon = geocode_city_nominatim(result["city"])
+        if lat and lon:
+            result["latitude"] = lat
+            result["longitude"] = lon
+            airport, airport_km = find_nearest_airport(lat, lon)
+            result["airport"] = airport
+            result["airport_km"] = airport_km
+
+    return jsonify(result)
+
+
+@app.route("/api/geocode", methods=["POST"])
+def api_geocode():
+    """Város geocoding: koordináták + legközelebbi reptér."""
+    data = request.get_json()
+    city = (data or {}).get("city", "").strip()
+    if not city:
+        return jsonify({"error": "city megadása kötelező"}), 400
+
+    lat, lon = geocode_city_nominatim(city)
+    if not lat:
+        return jsonify({"error": "Város nem található"}), 404
+
+    airport, airport_km = find_nearest_airport(lat, lon)
+    maps_url = f"https://www.google.com/maps?q={lat},{lon}"
+
+    return jsonify({
+        "latitude": lat,
+        "longitude": lon,
+        "airport": airport,
+        "airport_km": airport_km,
+        "maps_url": maps_url,
+    })
+
+
+@app.route("/api/properties", methods=["POST"])
+def api_create_property():
+    """Új ingatlan felvétele manuálisan."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Nincs adat"}), 400
+
+    lat = data.get("latitude")
+    lon = data.get("longitude")
+    maps_url = f"https://www.google.com/maps?q={lat},{lon}" if lat and lon else None
+
+    airport = data.get("airport") or ""
+    region = REGIONS.get(airport, "Egyéb")
+    manual_id = f"manual_{uuid.uuid4().hex[:12]}"
+
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO properties (
+                email_id, email_date, portal, city, region, airport, airport_km,
+                sea_km, latitude, longitude, price_eur, size_m2, parking, garden,
+                score, legal_status, reason, property_url, gmail_url, maps_url,
+                garden_m2, user_notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            manual_id,
+            datetime.utcnow().isoformat(),
+            data.get("portal", "egyéb"),
+            data.get("city"),
+            region,
+            airport or None,
+            data.get("airport_km"),
+            data.get("sea_km"),
+            lat,
+            lon,
+            data.get("price_eur"),
+            data.get("size_m2"),
+            data.get("parking"),
+            data.get("garden"),
+            data.get("score"),
+            data.get("legal_status"),
+            data.get("reason"),
+            data.get("property_url"),
+            None,
+            maps_url,
+            data.get("garden_m2"),
+            data.get("user_notes"),
+        ))
+        conn.commit()
+        new_id = cursor.lastrowid
+    except sqlite3.IntegrityError as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 409
+    finally:
+        conn.close()
+
+    return jsonify({"success": True, "id": new_id}), 201
 
 
 if __name__ == "__main__":

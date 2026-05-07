@@ -96,6 +96,12 @@
 
 <!-- Data Table -->
 <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-table"></i> Ingatlanok</span>
+        <button class="btn btn-sm btn-success" id="btn-add-property">
+            <i class="bi bi-plus-circle"></i> Új ingatlan felvétele
+        </button>
+    </div>
     <div class="card-body">
         <table id="properties-table" class="table table-striped table-hover" style="width:100%">
             <thead>
@@ -119,6 +125,157 @@
                 </tr>
             </thead>
         </table>
+    </div>
+</div>
+
+<!-- Add Property Modal -->
+<div class="modal fade" id="addPropertyModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Új ingatlan felvétele</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+
+                <!-- URL betöltés -->
+                <div class="card mb-3 border-primary">
+                    <div class="card-header bg-primary text-white py-2">
+                        <i class="bi bi-link-45deg"></i> Betöltés URL-ből (opcionális)
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group">
+                            <input type="url" class="form-control" id="add-url"
+                                placeholder="https://www.idealista.com/inmueble/... vagy kyero, thinkspain, fotocasa">
+                            <button class="btn btn-primary" id="btn-fetch-url" type="button">
+                                <i class="bi bi-cloud-download"></i> Adatok betöltése
+                            </button>
+                        </div>
+                        <div id="fetch-status" class="mt-2 small text-muted"></div>
+                    </div>
+                </div>
+
+                <!-- Mezők -->
+                <div class="row g-3">
+                    <!-- Sor 1: Portál, Város -->
+                    <div class="col-md-3">
+                        <label class="form-label">Portál</label>
+                        <select class="form-select form-select-sm" id="add-portal">
+                            <option value="egyéb">Egyéb / kézi</option>
+                            <option value="idealista.com">idealista.com</option>
+                            <option value="kyero.com">kyero.com</option>
+                            <option value="thinkspain.com">thinkspain.com</option>
+                            <option value="fotocasa.es">fotocasa.es</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Város / Helyszín</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" id="add-city" placeholder="pl. Torrevieja">
+                            <button class="btn btn-outline-secondary" id="btn-geocode" type="button" title="Koordináták lekérése">
+                                <i class="bi bi-geo-alt"></i> Geo
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Ingatlan URL</label>
+                        <input type="url" class="form-control form-control-sm" id="add-property-url" placeholder="https://...">
+                    </div>
+
+                    <!-- Sor 2: Ár, Méret -->
+                    <div class="col-md-3">
+                        <label class="form-label">Ár (EUR)</label>
+                        <input type="number" class="form-control form-control-sm" id="add-price" placeholder="pl. 195000">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Méret (m²)</label>
+                        <input type="number" class="form-control form-control-sm" id="add-size" placeholder="pl. 120">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Kert mérete (m²)</label>
+                        <input type="number" class="form-control form-control-sm" id="add-garden-m2" placeholder="pl. 200">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Tenger távolsága (km)</label>
+                        <input type="number" class="form-control form-control-sm" id="add-sea-km" placeholder="pl. 3">
+                    </div>
+
+                    <!-- Sor 3: Parkolás, Kert, Reptér -->
+                    <div class="col-md-3">
+                        <label class="form-label">Parkolás</label>
+                        <select class="form-select form-select-sm" id="add-parking">
+                            <option value="ismeretlen">Ismeretlen</option>
+                            <option value="igen">Igen</option>
+                            <option value="nem">Nem</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Kert</label>
+                        <select class="form-select form-select-sm" id="add-garden">
+                            <option value="ismeretlen">Ismeretlen</option>
+                            <option value="igen">Igen</option>
+                            <option value="nem">Nem</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Reptér</label>
+                        <select class="form-select form-select-sm" id="add-airport">
+                            <option value="">— auto / ismeretlen —</option>
+                            {% for code, name in airports.items() %}
+                            <option value="{{ code }}">{{ code }} – {{ name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Reptér távolsága (km)</label>
+                        <input type="number" class="form-control form-control-sm" id="add-airport-km" placeholder="auto">
+                    </div>
+
+                    <!-- Sor 4: Pontszám, Jogi -->
+                    <div class="col-md-3">
+                        <label class="form-label">Pontszám (1–10)</label>
+                        <input type="number" class="form-control form-control-sm" id="add-score"
+                            min="1" max="10" placeholder="pl. 7">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Jogi státusz</label>
+                        <select class="form-select form-select-sm" id="add-legal">
+                            <option value="ok">OK</option>
+                            <option value="kérdéses">Kérdéses</option>
+                            <option value="kizárt">Kizárt</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Koordináták <small class="text-muted">(auto-kitöltés)</small></label>
+                        <div class="input-group input-group-sm">
+                            <input type="number" step="any" class="form-control" id="add-lat" placeholder="Szélesség">
+                            <input type="number" step="any" class="form-control" id="add-lon" placeholder="Hosszúság">
+                        </div>
+                    </div>
+
+                    <!-- Sor 5: Indoklás -->
+                    <div class="col-12">
+                        <label class="form-label">Indoklás / Leírás</label>
+                        <textarea class="form-control form-control-sm" id="add-reason" rows="2"
+                            placeholder="Miért érdemes / miért nem..."></textarea>
+                    </div>
+
+                    <!-- Sor 6: Megjegyzés -->
+                    <div class="col-12">
+                        <label class="form-label">Saját megjegyzés</label>
+                        <textarea class="form-control form-control-sm" id="add-notes" rows="2"
+                            placeholder="Személyes jegyzetek..."></textarea>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
+                <button type="button" class="btn btn-success" id="btn-save-add">
+                    <i class="bi bi-check-lg"></i> Mentés
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
