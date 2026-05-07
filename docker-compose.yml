@@ -15,7 +15,7 @@ services:
       - /mnt/truenas_share/Program_Files/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
       - /mnt/truenas_share/Program_Files/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
       - /mnt/truenas_share/Program_Files/ingatlan-data/state.json:/app/ingatlan/state.json
-      - /mnt/truenas_share/Program_Files/ingatlan-data/data:/app/data
+      - /mnt/truenas_share/Program_Files/ingatlan-data:/app/data
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -35,7 +35,7 @@ services:
       DATA_DIR: /app/data
       FLASK_DEBUG: "0"
     volumes:
-      - /mnt/truenas_share/Program_Files/ingatlan-data/data:/app/data
+      - /mnt/truenas_share/Program_Files/ingatlan-data:/app/data
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -58,7 +58,7 @@ services:
       - /mnt/truenas_share/Program_Files/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
       - /mnt/truenas_share/Program_Files/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
       - /mnt/truenas_share/Program_Files/ingatlan-data/state.json:/app/ingatlan/state.json
-      - /mnt/truenas_share/Program_Files/ingatlan-data/data:/app/data
+      - /mnt/truenas_share/Program_Files/ingatlan-data:/app/data
     restart: "no"
     entrypoint: ["python"]
     command: ["simple_check.py"]
@@ -77,7 +77,7 @@ services:
       - /mnt/truenas_share/Program_Files/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
       - /mnt/truenas_share/Program_Files/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
       - /mnt/truenas_share/Program_Files/ingatlan-data/state.json:/app/ingatlan/state.json
-      - /mnt/truenas_share/Program_Files/ingatlan-data/data:/app/data
+      - /mnt/truenas_share/Program_Files/ingatlan-data:/app/data
     restart: "no"
     entrypoint: ["python"]
     command: ["detailed_check.py"]
@@ -96,7 +96,7 @@ services:
       - /mnt/truenas_share/Program_Files/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
       - /mnt/truenas_share/Program_Files/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
       - /mnt/truenas_share/Program_Files/ingatlan-data/state.json:/app/ingatlan/state.json
-      - /mnt/truenas_share/Program_Files/ingatlan-data/data:/app/data
+      - /mnt/truenas_share/Program_Files/ingatlan-data:/app/data
     restart: "no"
     entrypoint: ["python"]
     command: ["debug_24h.py"]
