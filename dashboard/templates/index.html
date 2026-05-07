@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}IngatlanMonitor - Dashboard{% endblock %}
+
+{% block content %}
+<!-- Stats Cards -->
+<div class="row mb-3" id="stats-row">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-house"></i> Összes ingatlan</h5>
+                <h2 id="stat-total">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-star-fill"></i> 7+ pontos</h5>
+                <h2 id="stat-high">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-heart-fill"></i> Kedvencek</h5>
+                <h2 id="stat-favorites">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-geo-alt"></i> Régiók</h5>
+                <div id="stat-regions" class="small">-</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+    <div class="card-header">
+        <i class="bi bi-funnel"></i> Szűrők
+        <button class="btn btn-sm btn-outline-secondary float-end" id="btn-reset-filters">
+            <i class="bi bi-x-circle"></i> Törlés
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-md-2">
+                <label class="form-label">Régió</label>
+                <select class="form-select form-select-sm" id="filter-region">
+                    <option value="">Összes</option>
+                    {% for code, name in regions.items() %}
+                    <option value="{{ name }}">{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Ár min (EUR)</label>
+                <input type="number" class="form-control form-control-sm" id="filter-min-price" placeholder="0">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Ár max (EUR)</label>
+                <input type="number" class="form-control form-control-sm" id="filter-max-price" placeholder="500000">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Méret min (m²)</label>
+                <input type="number" class="form-control form-control-sm" id="filter-min-size" placeholder="0">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Min pontszám</label>
+                <select class="form-select form-select-sm" id="filter-min-score">
+                    <option value="0">Összes</option>
+                    <option value="5">5+</option>
+                    <option value="7" selected>7+</option>
+                    <option value="8">8+</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Nézet</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="filter-favorites">
+                    <label class="form-check-label" for="filter-favorites">Csak kedvencek</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="filter-archived">
+                    <label class="form-check-label" for="filter-archived">Archivált is</label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Data Table -->
+<div class="card">
+    <div class="card-body">
+        <table id="properties-table" class="table table-striped table-hover" style="width:100%">
+            <thead>
+                <tr>
+                    <th>Pont</th>
+                    <th>Város</th>
+                    <th>Ár (EUR)</th>
+                    <th>Méret (m²)</th>
+                    <th>Tenger</th>
+                    <th>Reptér</th>
+                    <th>Rept. km</th>
+                    <th>Parkolás</th>
+                    <th>Kert</th>
+                    <th>Kert m²</th>
+                    <th>Jogi</th>
+                    <th>Indoklás</th>
+                    <th>Jegyzet</th>
+                    <th>Linkek</th>
+                    <th>Dátum</th>
+                    <th>Műveletek</th>
+                </tr>
+            </thead>
+        </table>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil"></i> Ingatlan szerkesztése</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-id">
+                <div class="mb-3">
+                    <label class="form-label">Város</label>
+                    <input type="text" class="form-control" id="edit-city" disabled>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Kert mérete (m²)</label>
+                    <input type="number" class="form-control" id="edit-garden-m2" placeholder="pl. 150">
+                    <div class="form-text">Ha az AI nem tudta megállapítani, itt kitöltheted.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Megjegyzés</label>
+                    <textarea class="form-control" id="edit-notes" rows="3" placeholder="Saját jegyzet..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
+                <button type="button" class="btn btn-primary" id="btn-save-edit">
+                    <i class="bi bi-check"></i> Mentés
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}

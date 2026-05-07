@@ -53,5 +53,10 @@ MANIFEST
 Thumbs.db
 *.log
 
+# Adatbazis
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
 # Docker
 .dockerignore

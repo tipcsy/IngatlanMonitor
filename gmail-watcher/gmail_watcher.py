@@ -21,6 +21,8 @@ from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
+from db import init_db, save_property
+
 # ── .env betöltése ────────────────────────────────────────────────────────────
 
 def load_env():
@@ -450,7 +452,8 @@ IMPORTANT: Respond ONLY with valid JSON, no extra text:
             data=data,
             headers={"Content-Type": "application/json"}
         )
-        with urllib.request.urlopen(req, timeout=300) as resp:
+        # Timeout növelése: phi3:mini CPU-n lassú, 600 másodperc kell
+        with urllib.request.urlopen(req, timeout=600) as resp:
             result = json.loads(resp.read())
             text = result.get("response", "").strip()
 
@@ -533,8 +536,23 @@ def format_telegram_message(details, prop):
     lines.append(f"📬 {portal}  |  📅 {email_date}")
     lines.append(f"💬 {prop.get('reason', '')}")
 
+    # Linkek szekció
+    lines.append("")  # üres sor
     if link:
-        lines.append(f"\n🔗 {link}")
+        lines.append(f"🔗 <a href=\"{link}\">Ingatlan megtekintése</a>")
+
+    # Térkép link (ha van koordináta)
+    coords = prop.get("coords")
+    if coords and coords[0] and coords[1]:
+        lat, lon = coords
+        maps_url = f"https://www.google.com/maps?q={lat},{lon}"
+        lines.append(f"🗺️ <a href=\"{maps_url}\">Térkép megnyitása</a>")
+
+    # Email link (Gmail)
+    email_id = details.get("id")
+    if email_id:
+        gmail_url = f"https://mail.google.com/mail/u/0/#inbox/{email_id}"
+        lines.append(f"📧 <a href=\"{gmail_url}\">Eredeti email</a>")
 
     return "\n".join(lines)
 
@@ -565,6 +583,9 @@ def process_message(details):
             prop["airport_km"] = apt_km
         if sea_km is not None and not prop.get("sea_km"):
             prop["sea_km"] = sea_km
+        # Koordináták mentése a térkép linkhez
+        if coords:
+            prop["coords"] = coords
 
         # Fallback a statikus táblázatból ha a Nominatim sem ment
         if not prop.get("airport") or not prop.get("airport_km"):
@@ -617,6 +638,24 @@ def process_message(details):
             continue
         details["link"] = matched_link
 
+        # Gmail URL generálása
+        email_id = details.get("id")
+        gmail_url = f"https://mail.google.com/mail/u/0/#inbox/{email_id}" if email_id else ""
+
+        # 5+ pontos ingatlanokat mentjük az adatbázisba
+        if score >= 5:
+            try:
+                save_property(
+                    email_id=email_id,
+                    email_date=details.get("date", ""),
+                    portal=identify_portal(details["sender"]),
+                    prop=prop,
+                    property_url=matched_link,
+                    gmail_url=gmail_url,
+                )
+            except Exception as e:
+                print(f"  [DB] Mentési hiba: {e}")
+
         if score >= 7:
             msg = format_telegram_message(details, prop)
             send_telegram(msg)
@@ -632,6 +671,9 @@ def run():
     print(f"\n{'='*60}")
     print(f"  Gmail Ingatlan Watcher — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"{'='*60}")
+
+    # Adatbázis inicializálása
+    init_db()
 
     service = get_gmail_service()
     state   = load_state()

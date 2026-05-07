@@ -1,0 +1,153 @@
+/* IngatlanMonitor Dashboard Styles */
+
+/* Score badges */
+.score-badge {
+    display: inline-block;
+    padding: 0.35em 0.65em;
+    font-size: 0.9em;
+    font-weight: 700;
+    border-radius: 0.375rem;
+    min-width: 2.5em;
+    text-align: center;
+}
+
+.score-high {
+    background-color: #198754;
+    color: white;
+}
+
+.score-medium {
+    background-color: #ffc107;
+    color: black;
+}
+
+.score-low {
+    background-color: #6c757d;
+    color: white;
+}
+
+/* Legal status badges */
+.legal-ok {
+    background-color: #198754;
+    color: white;
+}
+
+.legal-kizart {
+    background-color: #dc3545;
+    color: white;
+}
+
+.legal-kerdeses {
+    background-color: #ffc107;
+    color: black;
+}
+
+/* Boolean icons */
+.bool-yes {
+    color: #198754;
+}
+
+.bool-no {
+    color: #dc3545;
+}
+
+.bool-unknown {
+    color: #6c757d;
+}
+
+/* Favorite icon */
+.favorite-star {
+    cursor: pointer;
+    font-size: 1.2em;
+}
+
+.favorite-star.active {
+    color: #ffc107;
+}
+
+.favorite-star:not(.active) {
+    color: #dee2e6;
+}
+
+.favorite-star:hover {
+    color: #ffca2c;
+}
+
+/* Table adjustments */
+#properties-table {
+    font-size: 0.875rem;
+}
+
+#properties-table th {
+    white-space: nowrap;
+}
+
+#properties-table td {
+    vertical-align: middle;
+}
+
+/* Truncate long text */
+.text-truncate-cell {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Links cell */
+.links-cell a {
+    margin-right: 0.5em;
+}
+
+/* Action buttons */
+.action-btn {
+    padding: 0.25rem 0.4rem;
+    font-size: 0.8rem;
+}
+
+/* Stats cards */
+#stats-row .card {
+    transition: transform 0.2s;
+}
+
+#stats-row .card:hover {
+    transform: translateY(-2px);
+}
+
+/* Archived row styling */
+.row-archived {
+    opacity: 0.6;
+    background-color: #f8f9fa !important;
+}
+
+/* Airport tooltip */
+.airport-code {
+    cursor: help;
+    border-bottom: 1px dotted #666;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    #properties-table {
+        font-size: 0.75rem;
+    }
+
+    .score-badge {
+        font-size: 0.8em;
+    }
+}
+
+/* Price formatting */
+.price-cell {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/* DataTables customization */
+.dataTables_wrapper .dataTables_filter {
+    margin-bottom: 1rem;
+}
+
+.dataTables_wrapper .dataTables_length select {
+    min-width: 70px;
+}
