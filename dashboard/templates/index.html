@@ -296,10 +296,15 @@
                     <!-- Sor 5c: AI magyar leírás -->
                     <div class="col-12">
                         <label class="form-label d-flex justify-content-between align-items-center">
-                            <span>Magyar leírás <small class="text-muted">(AI fordítás)</small></span>
-                            <button type="button" class="btn btn-sm btn-outline-primary" id="btn-generate-hu">
-                                <i class="bi bi-stars"></i> Generálás
-                            </button>
+                            <span>Magyar leírás</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-success" id="btn-translate-hu" title="Teljes fordítás DeepL-lel">
+                                    <i class="bi bi-translate"></i> Fordítás
+                                </button>
+                                <button type="button" class="btn btn-outline-primary" id="btn-generate-hu" title="AI mezőkinyerés (kert, garázs, stb.)">
+                                    <i class="bi bi-stars"></i> AI mezők
+                                </button>
+                            </div>
                         </label>
                         <textarea class="form-control form-control-sm" id="add-description-hu" rows="3"
                             placeholder="Az ingatlan főbb jellemzőinek magyar összefoglalója..."></textarea>
