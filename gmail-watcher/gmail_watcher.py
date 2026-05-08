@@ -376,6 +376,71 @@ def nearest_ikea_km(lat, lon):
 # Lidl boltok cache fájlja — ugyanott mint a DB és egyéb adatfájlok (DATA_DIR)
 LIDL_CACHE_FILE = DATA_DIR / "lidl_stores.json"
 
+# Képek könyvtára — ugyanaz mint a dashboardban (DATA_DIR/images)
+IMAGES_DIR = DATA_DIR / "images"
+
+MIME_TO_EXT = {
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+
+def _find_image_parts(payload):
+    """Rekurzívan bejárja a MIME fát és visszaadja az image/* részeket."""
+    mime = payload.get("mimeType", "")
+    if mime.startswith("image/"):
+        yield payload
+    for part in payload.get("parts", []):
+        yield from _find_image_parts(part)
+
+def extract_and_save_email_image(service, msg_id, prop_id):
+    """
+    Kibányássza az email első képét és elmenti IMAGES_DIR/<prop_id>.<ext> fájlba.
+    Frissíti az adatbázis image_path mezőjét.
+    Visszatér a fájlnévvel, vagy None-nal ha nincs kép.
+    """
+    try:
+        msg = service.users().messages().get(
+            userId="me", id=msg_id, format="full"
+        ).execute()
+        for part in _find_image_parts(msg["payload"]):
+            mime = part.get("mimeType", "")
+            ext = MIME_TO_EXT.get(mime, ".jpg")
+            body = part.get("body", {})
+            data = body.get("data")
+            if not data:
+                attachment_id = body.get("attachmentId")
+                if not attachment_id:
+                    continue
+                att = service.users().messages().attachments().get(
+                    userId="me", messageId=msg_id, id=attachment_id
+                ).execute()
+                data = att.get("data")
+            if not data:
+                continue
+            image_bytes = base64.urlsafe_b64decode(data)
+            # Min. 5 KB — ikonokat és spacer pixel-eket kiszűri
+            if len(image_bytes) < 5 * 1024:
+                continue
+            IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+            filename = f"{prop_id}{ext}"
+            with open(IMAGES_DIR / filename, "wb") as f:
+                f.write(image_bytes)
+            # DB frissítés
+            import sqlite3
+            from db import get_db_connection
+            conn = get_db_connection()
+            conn.execute("UPDATE properties SET image_path = ? WHERE id = ?", (filename, prop_id))
+            conn.commit()
+            conn.close()
+            log.info(f"[Kép] Mentve: {filename} ({len(image_bytes)//1024} KB)")
+            return filename
+    except Exception as e:
+        log.warning(f"[Kép] Nem sikerült kinyerni: {e}")
+    return None
+
 def load_lidl_stores():
     """Lidl boltok koordinátáinak betöltése — cache fájlból vagy Overpass API-ból."""
     if LIDL_CACHE_FILE.exists():
@@ -706,7 +771,7 @@ def format_telegram_message(details, prop):
 
 # ── Fő logika ─────────────────────────────────────────────────────────────────
 
-def process_message(details):
+def process_message(details, service=None):
     log.info(f"{'─'*60}")
     log.info(f"Email: {details['subject'][:70]}")
     log.info(f"Portal: {identify_portal(details['sender'])}")
@@ -796,7 +861,7 @@ def process_message(details):
 
         # Minden értékelt ingatlant mentjük az adatbázisba
         try:
-            save_property(
+            row_id = save_property(
                 email_id=email_id,
                 email_date=details.get("date", ""),
                 portal=identify_portal(details["sender"]),
@@ -805,6 +870,8 @@ def process_message(details):
                 gmail_url=gmail_url,
                 original_text=details.get("body", ""),
             )
+            if row_id and service:
+                extract_and_save_email_image(service, email_id, row_id)
         except Exception as e:
             log.error(f"[DB] Mentési hiba ({city}): {e}")
 
@@ -861,7 +928,7 @@ def run():
             continue
 
         total_analyzed += 1
-        sent = process_message(details)
+        sent = process_message(details, service=service)
         total_sent += sent
 
     # State mentése
