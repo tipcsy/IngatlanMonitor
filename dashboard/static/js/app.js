@@ -17,6 +17,8 @@ let table;
 // Add/Edit modal mode: 'add' | 'edit'
 let propertyModalMode = 'add';
 let propertyEditId = null;
+// Vágólapról beillesztett kép tárolása (File objektum)
+let pendingPastedImage = null;
 
 // Initialize on document ready
 $(document).ready(function() {
@@ -368,10 +370,12 @@ function openEditModal(id) {
                 $('#add-notes').val(data.user_notes || '');
                 $('#add-lat').val(data.latitude !== null ? data.latitude : '');
                 $('#add-lon').val(data.longitude !== null ? data.longitude : '');
+                $('#add-original-text').val(data.original_text || '');
 
                 // Kép előnézet
                 const preview = $('#add-image-preview');
                 $('#add-image-file').val('');
+                pendingPastedImage = null;
                 if (data.image_path) {
                     preview.html(`<img src="/images/${data.image_path}" style="height:80px;border-radius:6px;object-fit:cover" class="me-2"><small class="text-muted">Új fájl választásával cseréled</small>`);
                 } else {
@@ -472,8 +476,77 @@ function initAddPropertyModal() {
         geocodeCity(city);
     });
 
+    // AI Generálás gomb: angol szöveg → magyar leírás + plusz mezők
+    $('#btn-generate-hu').on('click', function() {
+        const text = $('#add-original-text').val().trim();
+        if (!text) {
+            setFetchStatus('Az eredeti leírás mező üres — illeszd be vagy töltsd be URL-ből!', 'warning');
+            return;
+        }
+        const $btn = $(this);
+        $btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i> Generálás...');
+        setFetchStatus('<i class="bi bi-hourglass-split"></i> AI generálás folyamatban...', 'muted');
+
+        $.ajax({
+            url: '/api/ai_describe',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ original_text: text }),
+            success: function(data) {
+                if (data.description_hu) $('#add-description-hu').val(data.description_hu);
+                if (data.garden_m2) $('#add-garden-m2').val(data.garden_m2);
+                if (data.has_garage !== undefined) $('#add-has-garage').prop('checked', !!data.has_garage);
+                if (data.parking && data.parking !== 'ismeretlen') $('#add-parking').val(data.parking);
+                if (data.garden && data.garden !== 'ismeretlen') $('#add-garden').val(data.garden);
+                setFetchStatus('<i class="bi bi-check-circle"></i> Magyar leírás generálva — ellenőrizd!', 'success');
+            },
+            error: function(xhr) {
+                const msg = xhr.responseJSON ? xhr.responseJSON.error : 'Ismeretlen hiba';
+                setFetchStatus('<i class="bi bi-x-circle"></i> AI hiba: ' + escapeHtml(msg), 'danger');
+            },
+            complete: function() {
+                $btn.prop('disabled', false).html('<i class="bi bi-stars"></i> Generálás');
+            }
+        });
+    });
+
+    // Kép: fájl kiválasztás előnézet
+    $('#add-image-file').on('change', function() {
+        const file = this.files[0];
+        if (file) {
+            pendingPastedImage = null;
+            showImagePreview(file);
+        }
+    });
+
+    // Kép: Ctrl+V paste a modalban
+    document.getElementById('addPropertyModal').addEventListener('paste', function(e) {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                const file = item.getAsFile();
+                pendingPastedImage = file;
+                $('#add-image-file').val('');
+                showImagePreview(file);
+                e.preventDefault();
+                break;
+            }
+        }
+    });
+
     // Mentés
     $('#btn-save-add').on('click', saveNewProperty);
+}
+
+function showImagePreview(file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        $('#add-image-preview').html(
+            `<img src="${e.target.result}" style="height:80px;border-radius:6px;object-fit:cover" class="me-2">` +
+            `<small class="text-muted">${escapeHtml(file.name || 'vágólapról')}</small>`
+        );
+    };
+    reader.readAsDataURL(file);
 }
 
 /**
@@ -482,7 +555,7 @@ function initAddPropertyModal() {
 function resetAddForm() {
     ['add-url', 'add-city', 'add-property-url', 'add-price', 'add-size',
      'add-garden-m2', 'add-sea-km', 'add-airport-km', 'add-score',
-     'add-reason', 'add-description-hu', 'add-notes', 'add-lat', 'add-lon'].forEach(function(id) {
+     'add-reason', 'add-original-text', 'add-description-hu', 'add-notes', 'add-lat', 'add-lon'].forEach(function(id) {
         $('#' + id).val('');
     });
     $('#add-portal').val('egyéb');
@@ -493,6 +566,7 @@ function resetAddForm() {
     $('#add-has-garage').prop('checked', false);
     $('#add-image-file').val('');
     $('#add-image-preview').html('');
+    pendingPastedImage = null;
     setFetchStatus('', '');
 }
 
@@ -552,6 +626,8 @@ function fillAddFormFromData(data) {
     if (data.airport_km) $('#add-airport-km').val(data.airport_km);
     if (data.latitude) $('#add-lat').val(data.latitude);
     if (data.longitude) $('#add-lon').val(data.longitude);
+    // Eredeti leírás — mindig felülírjuk (üres is, hogy látszódjon sikerült-e letölteni)
+    $('#add-original-text').val(data.original_text || '');
 }
 
 /**
@@ -628,10 +704,12 @@ function saveNewProperty() {
         data: JSON.stringify(payload),
         success: function(resp) {
             const savedId = resp.id || propertyEditId;
-            const imageFile = $('#add-image-file')[0].files[0];
+            const imageFile = pendingPastedImage || $('#add-image-file')[0].files[0];
             if (imageFile && savedId) {
+                const ext = imageFile.type === 'image/png' ? '.png' : imageFile.type === 'image/webp' ? '.webp' : '.jpg';
+                const namedFile = imageFile.name ? imageFile : new File([imageFile], `paste${ext}`, { type: imageFile.type });
                 const formData = new FormData();
-                formData.append('image', imageFile);
+                formData.append('image', namedFile);
                 $.ajax({
                     url: '/api/properties/' + savedId + '/image',
                     method: 'POST',
