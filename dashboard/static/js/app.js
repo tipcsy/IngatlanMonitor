@@ -371,6 +371,8 @@ function openEditModal(id) {
                 $('#add-lat').val(data.latitude !== null ? data.latitude : '');
                 $('#add-lon').val(data.longitude !== null ? data.longitude : '');
                 $('#add-original-text').val(data.original_text || '');
+                $('#add-ikea-km').val(data.ikea_km != null ? data.ikea_km : '');
+                $('#add-lidl-km').val(data.lidl_km != null ? data.lidl_km : '');
 
                 // Kép előnézet
                 const preview = $('#add-image-preview');
@@ -476,6 +478,45 @@ function initAddPropertyModal() {
         geocodeCity(city);
     });
 
+    // Távolságok újraszámítása koordinátákból
+    $('#btn-recalc-distances').on('click', function() {
+        const lat = parseFloat($('#add-lat').val());
+        const lon = parseFloat($('#add-lon').val());
+        if (!lat || !lon) {
+            setFetchStatus('Kérlek add meg a koordinátákat!', 'warning');
+            return;
+        }
+        const $btn = $(this);
+        $btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i> Számítás...');
+        setFetchStatus('<i class="bi bi-hourglass-split"></i> Távolságok számítása...', 'muted');
+
+        $.ajax({
+            url: '/api/calc_distances',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ latitude: lat, longitude: lon }),
+            success: function(d) {
+                if (d.airport) $('#add-airport').val(d.airport);
+                if (d.airport_km) $('#add-airport-km').val(d.airport_km);
+                if (d.sea_km != null) $('#add-sea-km').val(d.sea_km);
+                if (d.ikea_km != null) $('#add-ikea-km').val(d.ikea_km);
+                if (d.lidl_km != null) $('#add-lidl-km').val(d.lidl_km);
+                const lidlInfo = d.lidl_km != null ? ` | Lidl: ${d.lidl_km} km` : ' | Lidl: nincs cache';
+                setFetchStatus(
+                    `<i class="bi bi-check-circle"></i> Reptér: ${d.airport} ${d.airport_km} km | Tenger: ${d.sea_km} km | IKEA: ${d.ikea_km} km${lidlInfo}`,
+                    'success'
+                );
+            },
+            error: function(xhr) {
+                const msg = xhr.responseJSON ? xhr.responseJSON.error : 'Ismeretlen hiba';
+                setFetchStatus('<i class="bi bi-x-circle"></i> Hiba: ' + escapeHtml(msg), 'danger');
+            },
+            complete: function() {
+                $btn.prop('disabled', false).html('<i class="bi bi-arrow-repeat"></i> Távolságok újraszámítása');
+            }
+        });
+    });
+
     // AI Generálás gomb: angol szöveg → magyar leírás + plusz mezők
     $('#btn-generate-hu').on('click', function() {
         const text = $('#add-original-text').val().trim();
@@ -555,7 +596,8 @@ function showImagePreview(file) {
 function resetAddForm() {
     ['add-url', 'add-city', 'add-property-url', 'add-price', 'add-size',
      'add-garden-m2', 'add-sea-km', 'add-airport-km', 'add-score',
-     'add-reason', 'add-original-text', 'add-description-hu', 'add-notes', 'add-lat', 'add-lon'].forEach(function(id) {
+     'add-reason', 'add-original-text', 'add-description-hu', 'add-notes',
+     'add-lat', 'add-lon', 'add-ikea-km', 'add-lidl-km'].forEach(function(id) {
         $('#' + id).val('');
     });
     $('#add-portal').val('egyéb');
@@ -687,6 +729,8 @@ function saveNewProperty() {
         description_hu: $('#add-description-hu').val().trim() || null,
         original_text: $('#add-original-text').val().trim() || null,
         has_garage: $('#add-has-garage').is(':checked') ? 1 : 0,
+        ikea_km: parseInt($('#add-ikea-km').val()) || null,
+        lidl_km: parseInt($('#add-lidl-km').val()) || null,
         user_notes: $('#add-notes').val().trim() || null,
         latitude: parseFloat($('#add-lat').val()) || null,
         longitude: parseFloat($('#add-lon').val()) || null,

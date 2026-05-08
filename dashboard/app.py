@@ -44,6 +44,23 @@ def haversine(lat1, lon1, lat2, lon2):
     return round(R * 2 * math.asin(math.sqrt(a)))
 
 
+IKEA_STORES = [
+    (40.4165, -3.7026), (40.5194, -3.6374), (40.3833, -3.6500), (40.4650, -3.5880),
+    (41.3784,  2.1399), (41.4270,  2.2290), (41.5450,  2.1040), (41.5718,  2.0330),
+    (39.4699, -0.3763), (37.3827, -5.9732), (43.2965, -1.9760), (43.3619, -5.8444),
+    (43.3209, -8.4461), (37.9092, -4.7796), (40.6430, -3.1670), (38.0056, -1.1709),
+    (28.1248,-15.4300), (28.4636,-16.2518),
+]
+
+COAST_POINTS = [
+    (36.7213, -4.4216), (36.5101, -4.8826), (36.3932, -5.1672),
+    (38.3452, -0.4815), (37.9786, -0.6822), (38.1010, -0.7321),
+    (37.6367, -0.9979), (37.5694, -1.0021), (37.8547, -1.3342),
+    (39.4561, -0.3274), (39.1701, -0.1654),
+    (41.3809,  2.1228), (41.7281,  2.9320),
+]
+
+
 def find_nearest_airport(lat, lon):
     best, best_d = None, float("inf")
     for code, (alat, alon) in AIRPORTS_COORDS.items():
@@ -51,6 +68,30 @@ def find_nearest_airport(lat, lon):
         if d < best_d:
             best_d, best = d, code
     return best, best_d
+
+
+def nearest_ikea_km(lat, lon):
+    return round(min(haversine(lat, lon, ilat, ilon) for ilat, ilon in IKEA_STORES))
+
+
+def nearest_coast_km(lat, lon):
+    return round(min(haversine(lat, lon, clat, clon) for clat, clon in COAST_POINTS))
+
+
+def nearest_lidl_km(lat, lon):
+    try:
+        from config import DATABASE
+        import json as _json
+        from pathlib import Path as _Path
+        cache = _Path(str(DATABASE)).parent / "lidl_stores.json"
+        if not cache.exists():
+            return None
+        stores = _json.loads(cache.read_text(encoding="utf-8"))
+        if not stores:
+            return None
+        return round(min(haversine(lat, lon, s[0], s[1]) for s in stores))
+    except Exception:
+        return None
 
 
 def geocode_city_nominatim(city_name):
@@ -537,7 +578,7 @@ def api_update_property(prop_id):
         "parking", "garden", "garden_m2", "airport", "airport_km",
         "latitude", "longitude", "score", "legal_status",
         "reason", "property_url", "user_notes", "has_garage",
-        "description_hu", "original_text",
+        "description_hu", "original_text", "ikea_km", "lidl_km",
     }
     updates = {k: v for k, v in data.items() if k in allowed_fields}
 
@@ -664,6 +705,30 @@ def api_geocode():
     })
 
 
+@app.route("/api/calc_distances", methods=["POST"])
+def api_calc_distances():
+    """Távolságok újraszámítása koordinátákból (reptér, tenger, IKEA, Lidl)."""
+    data = request.get_json()
+    try:
+        lat = float(data.get("latitude"))
+        lon = float(data.get("longitude"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Érvénytelen koordináták"}), 400
+
+    airport, airport_km = find_nearest_airport(lat, lon)
+    sea_km = nearest_coast_km(lat, lon)
+    ikea_km = nearest_ikea_km(lat, lon)
+    lidl_km = nearest_lidl_km(lat, lon)
+
+    return jsonify({
+        "airport": airport,
+        "airport_km": airport_km,
+        "sea_km": sea_km,
+        "ikea_km": ikea_km,
+        "lidl_km": lidl_km,
+    })
+
+
 @app.route("/api/ai_describe", methods=["POST"])
 def api_ai_describe():
     """AI-val generál magyar leírást és kitölti a plusz mezőket az angol szöveg alapján."""
@@ -732,8 +797,8 @@ def api_create_property():
                 email_id, email_date, portal, city, region, airport, airport_km,
                 sea_km, latitude, longitude, price_eur, size_m2, parking, garden,
                 score, legal_status, reason, property_url, gmail_url, maps_url,
-                garden_m2, user_notes, has_garage, description_hu, original_text
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                garden_m2, user_notes, has_garage, description_hu, original_text, ikea_km, lidl_km
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             manual_id,
             datetime.utcnow().isoformat(),
@@ -760,6 +825,8 @@ def api_create_property():
             1 if data.get("has_garage") else 0,
             data.get("description_hu"),
             data.get("original_text"),
+            data.get("ikea_km"),
+            data.get("lidl_km"),
         ))
         conn.commit()
         new_id = cursor.lastrowid
