@@ -130,6 +130,14 @@ function initDataTable() {
                 data: 'parking',
                 render: renderBool
             },
+            // Garage
+            {
+                data: 'has_garage',
+                render: function(data) {
+                    if (data) return '<i class="bi bi-check-circle-fill bool-yes" title="Van garázs"></i>';
+                    return '<i class="bi bi-x-circle-fill bool-no" title="Nincs garázs"></i>';
+                }
+            },
             // Garden
             {
                 data: 'garden',
@@ -140,6 +148,20 @@ function initDataTable() {
                 data: 'garden_m2',
                 render: function(data) {
                     return data ? `${data} m²` : '-';
+                }
+            },
+            // IKEA km
+            {
+                data: 'ikea_km',
+                render: function(data) {
+                    return data !== null && data !== undefined ? `${data} km` : '-';
+                }
+            },
+            // Lidl km
+            {
+                data: 'lidl_km',
+                render: function(data) {
+                    return data !== null && data !== undefined ? `${data} km` : '-';
                 }
             },
             // Legal status
@@ -340,6 +362,8 @@ function openEditModal(id) {
                 $('#add-score').val(data.score !== null ? data.score : '');
                 $('#add-legal').val(data.legal_status || 'ok');
                 $('#add-reason').val(data.reason || '');
+                $('#add-description-hu').val(data.description_hu || '');
+                $('#add-has-garage').prop('checked', !!data.has_garage);
                 $('#add-notes').val(data.user_notes || '');
                 $('#add-lat').val(data.latitude !== null ? data.latitude : '');
                 $('#add-lon').val(data.longitude !== null ? data.longitude : '');
@@ -457,7 +481,7 @@ function initAddPropertyModal() {
 function resetAddForm() {
     ['add-url', 'add-city', 'add-property-url', 'add-price', 'add-size',
      'add-garden-m2', 'add-sea-km', 'add-airport-km', 'add-score',
-     'add-reason', 'add-notes', 'add-lat', 'add-lon'].forEach(function(id) {
+     'add-reason', 'add-description-hu', 'add-notes', 'add-lat', 'add-lon'].forEach(function(id) {
         $('#' + id).val('');
     });
     $('#add-portal').val('egyéb');
@@ -465,6 +489,7 @@ function resetAddForm() {
     $('#add-garden').val('ismeretlen');
     $('#add-airport').val('');
     $('#add-legal').val('ok');
+    $('#add-has-garage').prop('checked', false);
     $('#add-image-file').val('');
     $('#add-image-preview').html('');
     setFetchStatus('', '');
@@ -582,6 +607,8 @@ function saveNewProperty() {
         score: parseInt($('#add-score').val()) || null,
         legal_status: $('#add-legal').val(),
         reason: $('#add-reason').val().trim() || null,
+        description_hu: $('#add-description-hu').val().trim() || null,
+        has_garage: $('#add-has-garage').is(':checked') ? 1 : 0,
         user_notes: $('#add-notes').val().trim() || null,
         latitude: parseFloat($('#add-lat').val()) || null,
         longitude: parseFloat($('#add-lon').val()) || null,

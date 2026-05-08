@@ -264,11 +264,20 @@ ALLOWED_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp', 'gif'}
 def migrate_db():
     """Új oszlopok hozzáadása ha még nem léteznek."""
     conn = sqlite3.connect(str(DATABASE))
-    try:
-        conn.execute("ALTER TABLE properties ADD COLUMN image_path TEXT")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass  # már létezik
+    new_columns = [
+        ("image_path", "TEXT"),
+        ("has_garage", "INTEGER DEFAULT 0"),
+        ("original_text", "TEXT"),
+        ("description_hu", "TEXT"),
+        ("ikea_km", "INTEGER"),
+        ("lidl_km", "INTEGER"),
+    ]
+    for col, col_type in new_columns:
+        try:
+            conn.execute(f"ALTER TABLE properties ADD COLUMN {col} {col_type}")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # már létezik
     conn.close()
 
 
@@ -321,8 +330,8 @@ def api_properties():
     columns = [
         None,
         "score", "city", "price_eur", "size_m2", "sea_km",
-        "airport", "airport_km", "parking", "garden", "garden_m2",
-        "legal_status", "reason", "user_notes", "property_url", "email_date", "id"
+        "airport", "airport_km", "parking", "has_garage", "garden", "garden_m2",
+        "ikea_km", "lidl_km", "legal_status", "reason", "user_notes", "property_url", "email_date", "id"
     ]
     col = columns[order_column_idx] if order_column_idx < len(columns) else None
     order_column = col if col else "score"
@@ -381,7 +390,8 @@ def api_properties():
         SELECT id, email_id, email_date, portal, city, region, airport, airport_km,
                sea_km, latitude, longitude, price_eur, size_m2, parking, garden,
                score, legal_status, reason, property_url, gmail_url, maps_url,
-               is_archived, is_favorite, garden_m2, user_notes, image_path
+               is_archived, is_favorite, garden_m2, user_notes, image_path,
+               has_garage, description_hu, ikea_km, lidl_km
         FROM properties
         WHERE {where_sql}
         ORDER BY {order_column} {order_dir}
@@ -420,6 +430,10 @@ def api_properties():
             "garden_m2": row["garden_m2"],
             "user_notes": row["user_notes"],
             "image_path": row["image_path"],
+            "has_garage": row["has_garage"],
+            "description_hu": row["description_hu"],
+            "ikea_km": row["ikea_km"],
+            "lidl_km": row["lidl_km"],
         })
 
     conn.close()
@@ -488,7 +502,7 @@ def api_update_property(prop_id):
         "portal", "city", "price_eur", "size_m2", "sea_km",
         "parking", "garden", "garden_m2", "airport", "airport_km",
         "latitude", "longitude", "score", "legal_status",
-        "reason", "property_url", "user_notes",
+        "reason", "property_url", "user_notes", "has_garage", "description_hu",
     }
     updates = {k: v for k, v in data.items() if k in allowed_fields}
 
@@ -638,8 +652,8 @@ def api_create_property():
                 email_id, email_date, portal, city, region, airport, airport_km,
                 sea_km, latitude, longitude, price_eur, size_m2, parking, garden,
                 score, legal_status, reason, property_url, gmail_url, maps_url,
-                garden_m2, user_notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                garden_m2, user_notes, has_garage
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             manual_id,
             datetime.utcnow().isoformat(),
@@ -663,6 +677,7 @@ def api_create_property():
             maps_url,
             data.get("garden_m2"),
             data.get("user_notes"),
+            1 if data.get("has_garage") else 0,
         ))
         conn.commit()
         new_id = cursor.lastrowid

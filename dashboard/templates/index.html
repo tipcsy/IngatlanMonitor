@@ -115,8 +115,11 @@
                     <th>Reptér</th>
                     <th>Rept. km</th>
                     <th>Parkolás</th>
+                    <th>Garázs</th>
                     <th>Kert</th>
                     <th>Kert m²</th>
+                    <th>IKEA km</th>
+                    <th>Lidl km</th>
                     <th>Jogi</th>
                     <th>Indoklás</th>
                     <th>Jegyzet</th>
@@ -201,7 +204,7 @@
                         <input type="number" class="form-control form-control-sm" id="add-sea-km" placeholder="pl. 3">
                     </div>
 
-                    <!-- Sor 3: Parkolás, Kert, Reptér -->
+                    <!-- Sor 3: Parkolás, Garázs, Kert, Reptér -->
                     <div class="col-md-3">
                         <label class="form-label">Parkolás</label>
                         <select class="form-select form-select-sm" id="add-parking">
@@ -209,6 +212,13 @@
                             <option value="igen">Igen</option>
                             <option value="nem">Nem</option>
                         </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Garázs</label>
+                        <div class="form-check mt-1">
+                            <input class="form-check-input" type="checkbox" id="add-has-garage">
+                            <label class="form-check-label" for="add-has-garage">Van garázs</label>
+                        </div>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Kert</label>
@@ -259,6 +269,13 @@
                         <label class="form-label">Indoklás / Leírás</label>
                         <textarea class="form-control form-control-sm" id="add-reason" rows="2"
                             placeholder="Miért érdemes / miért nem..."></textarea>
+                    </div>
+
+                    <!-- Sor 5b: AI magyar leírás -->
+                    <div class="col-12">
+                        <label class="form-label">Magyar leírás <small class="text-muted">(AI fordítás)</small></label>
+                        <textarea class="form-control form-control-sm" id="add-description-hu" rows="3"
+                            placeholder="Az ingatlan főbb jellemzőinek magyar összefoglalója..."></textarea>
                     </div>
 
                     <!-- Sor 6: Megjegyzés -->
