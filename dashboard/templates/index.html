@@ -241,6 +241,14 @@
                         <label class="form-label">Reptér távolsága (km)</label>
                         <input type="number" class="form-control form-control-sm" id="add-airport-km" placeholder="auto">
                     </div>
+                    <div class="col-md-3">
+                        <label class="form-label">IKEA távolsága (km)</label>
+                        <input type="number" class="form-control form-control-sm" id="add-ikea-km" placeholder="auto">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Lidl távolsága (km)</label>
+                        <input type="number" class="form-control form-control-sm" id="add-lidl-km" placeholder="auto">
+                    </div>
 
                     <!-- Sor 4: Pontszám, Jogi -->
                     <div class="col-md-3">
@@ -257,7 +265,12 @@
                         </select>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Koordináták <small class="text-muted">(auto-kitöltés)</small></label>
+                        <label class="form-label d-flex justify-content-between align-items-center">
+                            <span>Koordináták <small class="text-muted">(auto-kitöltés)</small></span>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-recalc-distances">
+                                <i class="bi bi-arrow-repeat"></i> Távolságok újraszámítása
+                            </button>
+                        </label>
                         <div class="input-group input-group-sm">
                             <input type="number" step="any" class="form-control" id="add-lat" placeholder="Szélesség">
                             <input type="number" step="any" class="form-control" id="add-lon" placeholder="Hosszúság">
