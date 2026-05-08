@@ -322,10 +322,13 @@ def index():
 @app.route("/api/properties", methods=["GET", "POST"])
 def api_properties():
     """
-    DataTables server-side processing végpont.
-    Támogatott paraméterek: draw, start, length, search[value], order, columns
-    Egyedi szűrők: region, min_price, max_price, min_size, min_score, show_archived, favorites_only
+    GET / form-POST: DataTables server-side processing
+    JSON-POST: új ingatlan létrehozása
     """
+    # JSON POST = új ingatlan létrehozása
+    if request.method == "POST" and request.is_json:
+        return api_create_property()
+
     conn = get_db()
     cursor = conn.cursor()
 
@@ -706,9 +709,8 @@ Respond ONLY with valid JSON:
         return jsonify({"error": str(e)}), 502
 
 
-@app.route("/api/properties", methods=["POST"])
 def api_create_property():
-    """Új ingatlan felvétele manuálisan."""
+    """Új ingatlan felvétele manuálisan (JSON POST)."""
     data = request.get_json()
     if not data:
         return jsonify({"error": "Nincs adat"}), 400
