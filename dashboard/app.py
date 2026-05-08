@@ -410,7 +410,11 @@ def api_properties():
         "ikea_km", "lidl_km", "legal_status", "reason", "user_notes", "property_url", "email_date", "id"
     ]
     col = columns[order_column_idx] if order_column_idx < len(columns) else None
-    order_column = col if col else "score"
+    _numeric_cols = {"price_eur", "size_m2", "sea_km", "airport_km", "garden_m2", "ikea_km", "lidl_km", "score"}
+    if col in _numeric_cols:
+        order_column = f"CAST({col} AS INTEGER)"
+    else:
+        order_column = col if col else "score"
 
     # Alap WHERE feltétel
     where_clauses = []
