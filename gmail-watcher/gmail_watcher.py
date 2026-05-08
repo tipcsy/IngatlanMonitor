@@ -396,11 +396,14 @@ node["shop"="supermarket"]["brand"="Lidl"](area.es);
 out body;
 """
     try:
-        data = json.dumps({"data": query}).encode()
+        data = urllib.parse.urlencode({"data": query}).encode()
         req = urllib.request.Request(
             "https://overpass-api.de/api/interpreter",
             data=data,
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "User-Agent": "IngatlanMonitor/1.0 (tipcsy@gmail.com)",
+            }
         )
         with urllib.request.urlopen(req, timeout=90) as resp:
             result = json.loads(resp.read())
