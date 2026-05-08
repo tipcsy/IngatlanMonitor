@@ -91,6 +91,7 @@ def scrape_property(url):
         "parking": None, "garden": None,
         "latitude": None, "longitude": None,
         "airport": None, "airport_km": None, "sea_km": None,
+        "original_text": None,
         "error": None,
     }
 
@@ -184,6 +185,9 @@ def scrape_property(url):
                         except Exception:
                             pass
                         break
+            desc_el = soup.select_one(".comment .wordwrap, [data-testid='description-content'], .adCommentsWrapper")
+            if desc_el:
+                result["original_text"] = desc_el.get_text(" ", strip=True)[:3000]
 
         elif portal == "kyero.com":
             if not result["price_eur"]:
@@ -199,6 +203,9 @@ def scrape_property(url):
                 el = soup.select_one(".location, [itemprop='addressLocality']")
                 if el:
                     result["city"] = el.get_text(strip=True)
+            desc_el = soup.select_one(".property-description, .description-container, .description")
+            if desc_el:
+                result["original_text"] = desc_el.get_text(" ", strip=True)[:3000]
 
         elif portal == "thinkspain.com":
             if not result["price_eur"]:
@@ -210,6 +217,9 @@ def scrape_property(url):
                             result["price_eur"] = int(m.group())
                         except Exception:
                             pass
+            desc_el = soup.select_one(".property-description, .description, [itemprop='description']")
+            if desc_el:
+                result["original_text"] = desc_el.get_text(" ", strip=True)[:3000]
 
         elif portal == "fotocasa.es":
             if not result["price_eur"]:
@@ -221,8 +231,16 @@ def scrape_property(url):
                             result["price_eur"] = int(m.group())
                         except Exception:
                             pass
+            desc_el = soup.select_one(".re-DetailDescription-text, [data-testid='description-text']")
+            if desc_el:
+                result["original_text"] = desc_el.get_text(" ", strip=True)[:3000]
 
-        # Fallback: meta description → ár
+        # Fallback: meta description → leírás és ár
+        if not result["original_text"]:
+            meta_desc = soup.find("meta", {"name": "description"}) or soup.find("meta", property="og:description")
+            if meta_desc and meta_desc.get("content"):
+                result["original_text"] = meta_desc["content"][:3000]
+
         if not result["price_eur"]:
             desc = soup.find("meta", {"name": "description"})
             if desc:
@@ -251,8 +269,12 @@ def scrape_property(url):
 
     return result
 
+import os
 import time
 app = Flask(__name__)
+
+OLLAMA_URL   = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 
 # Cache-busting: minden Flask indításkor új verzió → böngésző letölti a friss JS/CSS-t
 _STATIC_VERSION = str(int(time.time()))
@@ -636,6 +658,52 @@ def api_geocode():
         "airport_km": airport_km,
         "maps_url": maps_url,
     })
+
+
+@app.route("/api/ai_describe", methods=["POST"])
+def api_ai_describe():
+    """AI-val generál magyar leírást és kitölti a plusz mezőket az angol szöveg alapján."""
+    data = request.get_json()
+    text = (data or {}).get("original_text", "").strip()
+    if not text:
+        return jsonify({"error": "original_text megadása kötelező"}), 400
+
+    prompt = f"""You are a real estate assistant. Based on the English/Spanish property description below, provide a structured JSON response in Hungarian.
+
+Property description:
+{text[:3000]}
+
+Respond ONLY with valid JSON:
+{{
+  "description_hu": "3-5 mondatos magyar összefoglaló a főbb jellemzőkről (méret, kert, garázs, helyszín, állapot, különleges jellemzők)",
+  "garden_m2": null,
+  "has_garage": false,
+  "parking": "igen/nem/ismeretlen",
+  "garden": "igen/nem/ismeretlen",
+  "score_hint": "rövid megjegyzés a pontszámhoz (opcionális)"
+}}"""
+
+    try:
+        req_data = json.dumps({
+            "model": OLLAMA_MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "format": "json",
+        }).encode()
+        req = urllib.request.Request(
+            f"{OLLAMA_URL}/api/generate",
+            data=req_data,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            result = json.loads(resp.read())
+        text_out = result.get("response", "").strip()
+        json_match = re.search(r'\{.*\}', text_out, re.DOTALL)
+        if not json_match:
+            return jsonify({"error": "AI nem adott vissza JSON-t"}), 502
+        return jsonify(json.loads(json_match.group(0)))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
 
 
 @app.route("/api/properties", methods=["POST"])

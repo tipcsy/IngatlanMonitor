@@ -271,9 +271,23 @@
                             placeholder="Miért érdemes / miért nem..."></textarea>
                     </div>
 
-                    <!-- Sor 5b: AI magyar leírás -->
+                    <!-- Sor 5b: Eredeti angol leírás -->
                     <div class="col-12">
-                        <label class="form-label">Magyar leírás <small class="text-muted">(AI fordítás)</small></label>
+                        <label class="form-label">
+                            Eredeti leírás <small class="text-muted">(angol/spanyol — szerkeszthető)</small>
+                        </label>
+                        <textarea class="form-control form-control-sm" id="add-original-text" rows="4"
+                            placeholder="Az ingatlan eredeti leírása (URL-ből automatikusan töltődhet, vagy illeszd be manuálisan)..."></textarea>
+                    </div>
+
+                    <!-- Sor 5c: AI magyar leírás -->
+                    <div class="col-12">
+                        <label class="form-label d-flex justify-content-between align-items-center">
+                            <span>Magyar leírás <small class="text-muted">(AI fordítás)</small></span>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="btn-generate-hu">
+                                <i class="bi bi-stars"></i> Generálás
+                            </button>
+                        </label>
                         <textarea class="form-control form-control-sm" id="add-description-hu" rows="3"
                             placeholder="Az ingatlan főbb jellemzőinek magyar összefoglalója..."></textarea>
                     </div>
