@@ -4,9 +4,12 @@ Az ingatlanok mentése és lekérdezése a dashboard számára.
 """
 
 import os
+import logging
 import sqlite3
 from pathlib import Path
 from datetime import datetime
+
+log = logging.getLogger(__name__)
 
 # Adatbázis elérési útja
 # Docker-ben: /app/data/ingatlan.db (megosztott volume, DATA_DIR env var-ból)
@@ -42,7 +45,12 @@ CREATE TABLE IF NOT EXISTS properties (
     is_archived INTEGER DEFAULT 0,
     is_favorite INTEGER DEFAULT 0,
     garden_m2 INTEGER,
-    user_notes TEXT
+    user_notes TEXT,
+    has_garage INTEGER DEFAULT 0,
+    original_text TEXT,
+    description_hu TEXT,
+    ikea_km INTEGER,
+    lidl_km INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_score ON properties(score);
@@ -76,10 +84,11 @@ def init_db():
     conn.executescript(SCHEMA)
     conn.commit()
     conn.close()
-    print(f"[DB] Adatbázis inicializálva: {DB_PATH}")
+    log.info(f"[DB] Adatbázis inicializálva: {DB_PATH}")
 
 
-def save_property(email_id, email_date, portal, prop, property_url, gmail_url):
+def save_property(email_id, email_date, portal, prop, property_url, gmail_url,
+                  original_text=None):
     """
     Ingatlan mentése az adatbázisba.
 
@@ -90,6 +99,7 @@ def save_property(email_id, email_date, portal, prop, property_url, gmail_url):
         prop: AI értékelés dict (city, price_eur, score, stb.)
         property_url: Ingatlan URL
         gmail_url: Gmail link az emailhez
+        original_text: Eredeti e-mail szöveg (angol/spanyol)
 
     Returns:
         int: Beszúrt sor ID-ja, vagy None ha már létezett
@@ -125,8 +135,9 @@ def save_property(email_id, email_date, portal, prop, property_url, gmail_url):
             INSERT INTO properties (
                 email_id, email_date, portal, city, region, airport, airport_km,
                 sea_km, latitude, longitude, price_eur, size_m2, parking, garden,
-                score, legal_status, reason, property_url, gmail_url, maps_url
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                score, legal_status, reason, property_url, gmail_url, maps_url,
+                garden_m2, has_garage, original_text, description_hu, ikea_km, lidl_km
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             email_id,
             parsed_date,
@@ -148,14 +159,19 @@ def save_property(email_id, email_date, portal, prop, property_url, gmail_url):
             property_url,
             gmail_url,
             maps_url,
+            prop.get("garden_m2"),
+            1 if prop.get("has_garage") else 0,
+            original_text,
+            prop.get("description_hu"),
+            prop.get("ikea_km"),
+            prop.get("lidl_km"),
         ))
         conn.commit()
         row_id = cursor.lastrowid
-        print(f"[DB] Mentve: {prop.get('city')} | {prop.get('price_eur')} EUR | {prop.get('score')}/10 (ID: {row_id})")
+        log.info(f"[DB] Mentve: {prop.get('city')} | {prop.get('price_eur')} EUR | {prop.get('score')}/10 (ID: {row_id})")
         return row_id
     except sqlite3.IntegrityError:
-        # email_id már létezik (deduplikáció)
-        print(f"[DB] Már létezik: {email_id[:20]}...")
+        log.info(f"[DB] Már létezik (kihagyva): {email_id[:20]}...")
         return None
     finally:
         conn.close()
@@ -175,7 +191,7 @@ def update_property(prop_id, **kwargs):
     """
     Ingatlan frissítése (garden_m2, user_notes, is_favorite, is_archived).
     """
-    allowed_fields = {"garden_m2", "user_notes", "is_favorite", "is_archived"}
+    allowed_fields = {"garden_m2", "user_notes", "is_favorite", "is_archived", "description_hu", "has_garage"}
     updates = {k: v for k, v in kwargs.items() if k in allowed_fields}
 
     if not updates:
