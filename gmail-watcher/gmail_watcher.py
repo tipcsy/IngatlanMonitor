@@ -12,16 +12,18 @@ import json
 import base64
 import re
 import pickle
+import logging
 import urllib.request
 import urllib.parse
 from datetime import datetime, timezone
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-from db import init_db, save_property
+from db import init_db, save_property, DATA_DIR
 
 # ── .env betöltése ────────────────────────────────────────────────────────────
 
@@ -35,6 +37,31 @@ def load_env():
                 os.environ.setdefault(key.strip(), value.strip())
 
 load_env()
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+
+def setup_logging():
+    log_dir = DATA_DIR.parent / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "gmail_watcher.log"
+
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+
+    file_handler = RotatingFileHandler(
+        str(log_file), maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+    )
+    file_handler.setFormatter(fmt)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(fmt)
+
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(file_handler)
+    root.addHandler(console_handler)
+
+setup_logging()
+log = logging.getLogger(__name__)
 
 # ── Konfiguráció ──────────────────────────────────────────────────────────────
 
@@ -323,10 +350,10 @@ def geocode_city(city_name, country="Spain"):
                     )
                 if best is None:
                     continue
-                print(f"  [Geo] '{name}' → {best['display_name'][:70]}")
+                log.info(f"[Geo] '{name}' → {best['display_name'][:70]}")
                 return float(best["lat"]), float(best["lon"])
         except Exception as e:
-            print(f"  [Geo] Nominatim hiba ({name}): {e}")
+            log.warning(f"[Geo] Nominatim hiba ({name}): {e}")
     return None, None
 
 def nearest_airport(lat, lon):
@@ -342,17 +369,84 @@ def nearest_coast_km(lat, lon):
     """Becsült távolság a legközelebbi tengerparti ponttól."""
     return round(min(haversine(lat, lon, clat, clon) for clat, clon in COAST_POINTS))
 
+def nearest_ikea_km(lat, lon):
+    """Legközelebbi IKEA távolsága km-ben."""
+    return round(min(haversine(lat, lon, ilat, ilon) for ilat, ilon, _ in IKEA_STORES))
+
+# Lidl boltok cache fájlja — ugyanott mint a DB és egyéb adatfájlok (DATA_DIR)
+LIDL_CACHE_FILE = DATA_DIR / "lidl_stores.json"
+
+def load_lidl_stores():
+    """Lidl boltok koordinátáinak betöltése — cache fájlból vagy Overpass API-ból."""
+    if LIDL_CACHE_FILE.exists():
+        try:
+            with open(LIDL_CACHE_FILE, encoding="utf-8") as f:
+                stores = json.load(f)
+            if stores:
+                log.info(f"[Lidl] {len(stores)} bolt betöltve a cache-ből.")
+                return stores
+        except Exception:
+            pass
+
+    log.info("[Lidl] Cache nem található, letöltés Overpass API-ból...")
+    query = """
+[out:json][timeout:60];
+area["ISO3166-1"="ES"][admin_level=2]->.es;
+node["shop"="supermarket"]["brand"="Lidl"](area.es);
+out body;
+"""
+    try:
+        data = json.dumps({"data": query}).encode()
+        req = urllib.request.Request(
+            "https://overpass-api.de/api/interpreter",
+            data=data,
+            headers={"Content-Type": "application/x-www-form-urlencoded"}
+        )
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            result = json.loads(resp.read())
+        stores = [
+            (el["lat"], el["lon"])
+            for el in result.get("elements", [])
+            if el.get("type") == "node"
+        ]
+        if stores:
+            with open(LIDL_CACHE_FILE, "w", encoding="utf-8") as f:
+                json.dump(stores, f)
+            log.info(f"[Lidl] {len(stores)} bolt letöltve és elmentve.")
+        return stores
+    except Exception as e:
+        log.error(f"[Lidl] Overpass hiba: {e}")
+        return []
+
+# Lidl boltok betöltése induláskor
+_LIDL_STORES = None
+
+def get_lidl_stores():
+    global _LIDL_STORES
+    if _LIDL_STORES is None:
+        _LIDL_STORES = load_lidl_stores()
+    return _LIDL_STORES
+
+def nearest_lidl_km(lat, lon):
+    """Legközelebbi Lidl távolsága km-ben, vagy None ha nincs adat."""
+    stores = get_lidl_stores()
+    if not stores:
+        return None
+    return round(min(haversine(lat, lon, slat, slon) for slat, slon in stores))
+
 def geo_lookup(city):
-    """Városnév alapján reptér és tenger távolság becslése."""
+    """Városnév alapján reptér, tenger, IKEA és Lidl távolság becslése."""
     if not city or city in ("?", "ismeretlen", "Costa del Sol"):
-        return None, None, None, None
+        return None, None, None, None, None, None
     lat, lon = geocode_city(city)
     if lat is None:
-        return None, None, None, None
+        return None, None, None, None, None, None
     apt_code, apt_name, apt_km = nearest_airport(lat, lon)
     sea_km = nearest_coast_km(lat, lon)
-    print(f"  [Geo] {city} → reptér: {apt_code} {apt_km} km | tenger: ~{sea_km} km")
-    return apt_code, apt_km, sea_km, (lat, lon)
+    ikea_km = nearest_ikea_km(lat, lon)
+    lidl_km = nearest_lidl_km(lat, lon)
+    log.info(f"[Geo] {city} → reptér: {apt_code} {apt_km} km | tenger: ~{sea_km} km | IKEA: ~{ikea_km} km | Lidl: ~{lidl_km} km")
+    return apt_code, apt_km, sea_km, (lat, lon), ikea_km, lidl_km
 
 # ── AI értékelés ──────────────────────────────────────────────────────────────
 
@@ -363,6 +457,28 @@ def load_rules():
 
 OLLAMA_URL   = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
+
+# IKEA áruházak Spanyolországban (lat, lon, város)
+IKEA_STORES = [
+    (40.4165, -3.7026, "Madrid - Alcorcón"),
+    (40.5194, -3.6374, "Madrid - San Sebastián de los Reyes"),
+    (40.3833, -3.6500, "Madrid - Leganés"),
+    (40.4650, -3.5880, "Madrid - Vallecas"),
+    (41.3784, 2.1399,  "Barcelona - L'Hospitalet"),
+    (41.4270, 2.2290,  "Barcelona - Badalona"),
+    (41.5450, 2.1040,  "Barcelona - Sabadell"),
+    (39.4699, -0.3763, "Valencia"),
+    (37.3827, -5.9732, "Sevilla"),
+    (43.2965, -1.9760, "Bilbao - Barakaldo"),
+    (43.3619, -5.8444, "Oviedo - Llanera"),
+    (43.3209, -8.4461, "A Coruña"),
+    (37.9092, -4.7796, "Córdoba"),
+    (40.6430, -3.1670, "Alcalá de Henares"),
+    (38.0056, -1.1709, "Murcia"),
+    (28.1248,-15.4300, "Las Palmas (Gran Canaria)"),
+    (28.4636,-16.2518, "Santa Cruz de Tenerife"),
+    (41.5718,  2.0330, "Terrassa"),
+]
 
 # Reptér koordináták (lat, lon, név) — csak Budapest közvetlen járattal!
 AIRPORTS = {
@@ -428,12 +544,15 @@ Body:
    - city: location name — for small villages use "Village, Municipality" format (e.g. "Isla Plana, Cartagena" or "Benahadux, Almería"). For large cities just the city name is fine.
    - price_eur: price as integer (0 if unknown)
    - size_m2: living area in m² as integer (0 if unknown)
+   - garden_m2: garden area in m² as integer (null if unknown or no garden)
    - sea_km: distance to sea in km as number (null if unknown)
    - parking: "igen" / "nem" / "ismeretlen"
    - garden: "igen" / "nem" / "ismeretlen"
+   - has_garage: true if the listing explicitly mentions a garage, false otherwise
    - legal_status: "ok" / "kizárt" / "kérdéses"
    - score: integer 1-10 based on the scoring rules (0 if EXCLUDED)
    - reason: 1-2 sentence explanation in Hungarian
+   - description_hu: a 3-5 sentence Hungarian summary of the key property features (size, garden, garage, location highlights, condition, special features). Translate the most important details from the original listing text.
    - link: property URL if found in email, else empty string
 
 Airports to check distance from (max 100km):
@@ -450,14 +569,17 @@ IMPORTANT: Respond ONLY with valid JSON, no extra text:
       "city": "...",
       "price_eur": 0,
       "size_m2": 0,
+      "garden_m2": null,
       "sea_km": null,
       "airport": "AGP/ALC/RMU/VLC/BIO or null",
       "airport_km": null,
       "parking": "igen/nem/ismeretlen",
       "garden": "igen/nem/ismeretlen",
+      "has_garage": false,
       "legal_status": "ok/kizárt/kérdéses",
       "score": 0,
       "reason": "...",
+      "description_hu": "...",
       "link": ""
     }}
   ]
@@ -484,18 +606,18 @@ IMPORTANT: Respond ONLY with valid JSON, no extra text:
         if json_match:
             return json.loads(json_match.group(0))
         else:
-            print(f"[AI] JSON nem található a válaszban: {text[:200]}")
+            log.warning(f"[AI] JSON nem található a válaszban: {text[:200]}")
             return None
 
     except Exception as e:
-        print(f"[AI] Hiba: {e}")
+        log.error(f"[AI] Hiba: {e}")
         return None
 
 # ── Telegram ──────────────────────────────────────────────────────────────────
 
 def send_telegram(message):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("[Telegram] Nincs konfig, kihagyva.")
+        log.warning("[Telegram] Nincs konfig (TELEGRAM_TOKEN/CHAT_ID hiányzik), kihagyva.")
         return False
     url  = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     data = json.dumps({
@@ -508,10 +630,10 @@ def send_telegram(message):
                                  headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=300) as resp:
-            print(f"[Telegram] ✅ Elküldve (HTTP {resp.status})")
+            log.info(f"[Telegram] Elküldve (HTTP {resp.status})")
             return True
     except Exception as e:
-        print(f"[Telegram] ❌ Hiba: {e}")
+        log.error(f"[Telegram] Hiba: {e}")
         return False
 
 def parse_email_date(date_str):
@@ -582,13 +704,13 @@ def format_telegram_message(details, prop):
 # ── Fő logika ─────────────────────────────────────────────────────────────────
 
 def process_message(details):
-    print(f"\n{'─'*60}")
-    print(f"  📧 {details['subject'][:70]}")
-    print(f"  📬 {identify_portal(details['sender'])}")
+    log.info(f"{'─'*60}")
+    log.info(f"Email: {details['subject'][:70]}")
+    log.info(f"Portal: {identify_portal(details['sender'])}")
 
     result = evaluate_with_ai(details)
     if not result:
-        print("  [AI] Értékelés sikertelen, kihagyva.")
+        log.warning("[AI] Értékelés sikertelen, kihagyva.")
         return 0
 
     properties = result.get("properties", [])
@@ -600,12 +722,16 @@ def process_message(details):
         city  = prop.get("city", "?")
 
         # Geo lookup — Nominatim alapján pontos számítás
-        apt_code, apt_km, sea_km, coords = geo_lookup(city)
+        apt_code, apt_km, sea_km, coords, ikea_km, lidl_km = geo_lookup(city)
         if apt_code:
             prop["airport"]    = apt_code
             prop["airport_km"] = apt_km
         if sea_km is not None and not prop.get("sea_km"):
             prop["sea_km"] = sea_km
+        if ikea_km is not None:
+            prop["ikea_km"] = ikea_km
+        if lidl_km is not None:
+            prop["lidl_km"] = lidl_km
         # Koordináták mentése a térkép linkhez
         if coords:
             prop["coords"] = coords
@@ -619,10 +745,10 @@ def process_message(details):
                     prop["airport_km"] = km
                     break
 
-        print(f"  🏡 {city} | {prop.get('price_eur', '?')} € | {score}/10 | {prop.get('reason', '')[:60]}")
+        log.info(f"Ingatlan: {city} | {prop.get('price_eur', '?')} EUR | {score}/10 | {prop.get('reason', '')[:60]}")
 
         if legal == "kizárt":
-            print(f"  ⛔ Kizárt jogi státusz, kihagyva.")
+            log.info(f"Kizárt jogi státusz, kihagyva: {city}")
             continue
 
         # Link párosítás
@@ -657,7 +783,7 @@ def process_message(details):
                 matched_link = all_links[idx] if idx < len(all_links) else all_links[0]
 
         if not matched_link:
-            print(f"  ⚠️  Nincs valódi link az emailben — kihagyva")
+            log.warning(f"Nincs valódi link az emailben, kihagyva: {city}")
             continue
         details["link"] = matched_link
 
@@ -674,25 +800,27 @@ def process_message(details):
                 prop=prop,
                 property_url=matched_link,
                 gmail_url=gmail_url,
+                original_text=details.get("body", ""),
             )
         except Exception as e:
-            print(f"  [DB] Mentési hiba: {e}")
+            log.error(f"[DB] Mentési hiba ({city}): {e}")
 
         if score >= 7:
+            log.info(f"Telegram értesítő küldése: {city} | {score}/10")
             msg = format_telegram_message(details, prop)
             send_telegram(msg)
             sent += 1
         elif score >= 5:
-            print(f"  ℹ️  {score}/10 — Megfelel de nem küldünk értesítőt (5-7 pont)")
+            log.info(f"{score}/10 — Megfelel, Telegram értesítő nem szükséges: {city}")
         else:
-            print(f"  🗑️  {score}/10 — Nem felel meg")
+            log.info(f"{score}/10 — Nem felel meg: {city}")
 
     return sent
 
 def run():
-    print(f"\n{'='*60}")
-    print(f"  Gmail Ingatlan Watcher — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"{'='*60}")
+    log.info(f"{'='*60}")
+    log.info(f"Gmail Ingatlan Watcher indul — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    log.info(f"{'='*60}")
 
     # Adatbázis inicializálása
     init_db()
@@ -702,11 +830,11 @@ def run():
 
     label_id = get_label_id(service, GMAIL_LABEL)
     if not label_id:
-        print(f"[HIBA] '{GMAIL_LABEL}' mappa nem található!")
+        log.error(f"'{GMAIL_LABEL}' Gmail mappa nem található!")
         return
 
     new_messages = fetch_new_messages(service, label_id, state)
-    print(f"\n📬 {len(new_messages)} új üzenet a mappában.")
+    log.info(f"{len(new_messages)} új üzenet a mappában.")
 
     processed_ids  = list(state.get("processed_ids", []))
     total_sent     = 0
@@ -720,13 +848,13 @@ def run():
         # Nem spanyol portál
         if not is_spanish_portal(details["sender"]):
             total_skipped += 1
-            print(f"\n[SKIP] {details['sender'][:50]}")
+            log.info(f"[SKIP] Nem spanyol portál: {details['sender'][:50]}")
             continue
 
         # Hírlevél / nem ajánlat
         if is_newsletter(details["subject"]):
             total_skipped += 1
-            print(f"\n[SKIP] Hírlevél: {details['subject'][:60]}")
+            log.info(f"[SKIP] Hírlevél: {details['subject'][:60]}")
             continue
 
         total_analyzed += 1
@@ -738,9 +866,9 @@ def run():
     state["last_run"] = datetime.now(timezone.utc).isoformat()
     save_state(state)
 
-    print(f"\n{'='*60}")
-    print(f"  ✅ Kész! Elemzett: {total_analyzed} | Értesítő: {total_sent} | Kihagyva: {total_skipped}")
-    print(f"{'='*60}\n")
+    log.info(f"{'='*60}")
+    log.info(f"Kész! Elemzett: {total_analyzed} | Telegram értesítő: {total_sent} | Kihagyva: {total_skipped}")
+    log.info(f"{'='*60}")
 
 if __name__ == "__main__":
     run()
