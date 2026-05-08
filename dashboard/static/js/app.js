@@ -685,6 +685,7 @@ function saveNewProperty() {
         legal_status: $('#add-legal').val(),
         reason: $('#add-reason').val().trim() || null,
         description_hu: $('#add-description-hu').val().trim() || null,
+        original_text: $('#add-original-text').val().trim() || null,
         has_garage: $('#add-has-garage').is(':checked') ? 1 : 0,
         user_notes: $('#add-notes').val().trim() || null,
         latitude: parseFloat($('#add-lat').val()) || null,
