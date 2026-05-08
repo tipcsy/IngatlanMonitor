@@ -297,7 +297,7 @@ def index():
     return render_template("index.html", regions=REGIONS, airports=AIRPORT_NAMES)
 
 
-@app.route("/api/properties")
+@app.route("/api/properties", methods=["GET", "POST"])
 def api_properties():
     """
     DataTables server-side processing végpont.
@@ -307,24 +307,33 @@ def api_properties():
     conn = get_db()
     cursor = conn.cursor()
 
+    # POST (DataTables) vagy GET (közvetlen hívás) egyaránt
+    p = request.form if request.method == "POST" else request.args
+
+    def get_int(key, default=0):
+        try:
+            return int(p.get(key, default))
+        except (ValueError, TypeError):
+            return default
+
     # DataTables paraméterek
-    draw = request.args.get("draw", 1, type=int)
-    start = request.args.get("start", 0, type=int)
-    length = request.args.get("length", 25, type=int)
-    search_value = request.args.get("search[value]", "")
+    draw = get_int("draw", 1)
+    start = get_int("start", 0)
+    length = get_int("length", 25)
+    search_value = p.get("search[value]", "")
 
     # Egyedi szűrők
-    region = request.args.get("region", "")
-    min_price = request.args.get("min_price", 0, type=int)
-    max_price = request.args.get("max_price", 0, type=int)
-    min_size = request.args.get("min_size", 0, type=int)
-    min_score = request.args.get("min_score", 0, type=int)
-    show_archived = request.args.get("show_archived", "0") == "1"
-    favorites_only = request.args.get("favorites_only", "0") == "1"
+    region = p.get("region", "")
+    min_price = get_int("min_price", 0)
+    max_price = get_int("max_price", 0)
+    min_size = get_int("min_size", 0)
+    min_score = get_int("min_score", 0)
+    show_archived = p.get("show_archived", "0") == "1"
+    favorites_only = p.get("favorites_only", "0") == "1"
 
     # Rendezés
-    order_column_idx = request.args.get("order[0][column]", 0, type=int)
-    order_dir = request.args.get("order[0][dir]", "desc")
+    order_column_idx = get_int("order[0][column]", 0)
+    order_dir = p.get("order[0][dir]", "desc")
 
     # Oszlop mapping (DataTables index → SQL oszlop), 0. = kép (nem rendezhető)
     columns = [
