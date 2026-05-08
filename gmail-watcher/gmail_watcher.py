@@ -41,7 +41,7 @@ load_env()
 # ── Logging ───────────────────────────────────────────────────────────────────
 
 def setup_logging():
-    log_dir = DATA_DIR.parent / "logs"
+    log_dir = DATA_DIR / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "gmail_watcher.log"
 
