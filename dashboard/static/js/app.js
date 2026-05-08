@@ -517,7 +517,39 @@ function initAddPropertyModal() {
         });
     });
 
-    // AI Generálás gomb: angol szöveg → magyar leírás + plusz mezők
+    // DeepL Fordítás gomb: teljes szöveg → magyar fordítás
+    $('#btn-translate-hu').on('click', function() {
+        const text = $('#add-original-text').val().trim();
+        if (!text) {
+            setFetchStatus('Az eredeti leírás mező üres — illeszd be vagy töltsd be URL-ből!', 'warning');
+            return;
+        }
+        const $btn = $(this);
+        $btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i> Fordítás...');
+        setFetchStatus('<i class="bi bi-hourglass-split"></i> DeepL fordítás folyamatban...', 'muted');
+
+        $.ajax({
+            url: '/api/translate',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ text: text }),
+            success: function(data) {
+                if (data.translated) {
+                    $('#add-description-hu').val(data.translated);
+                    setFetchStatus('<i class="bi bi-check-circle"></i> Fordítás kész!', 'success');
+                }
+            },
+            error: function(xhr) {
+                const msg = xhr.responseJSON ? xhr.responseJSON.error : 'Ismeretlen hiba';
+                setFetchStatus('<i class="bi bi-x-circle"></i> Fordítási hiba: ' + escapeHtml(msg), 'danger');
+            },
+            complete: function() {
+                $btn.prop('disabled', false).html('<i class="bi bi-translate"></i> Fordítás');
+            }
+        });
+    });
+
+    // AI Generálás gomb: angol szöveg → mezőkinyerés (kert, garázs, parkolás stb.)
     $('#btn-generate-hu').on('click', function() {
         const text = $('#add-original-text').val().trim();
         if (!text) {
