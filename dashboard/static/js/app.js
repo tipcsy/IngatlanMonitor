@@ -54,6 +54,7 @@ function initDataTable() {
         serverSide: true,
         ajax: {
             url: '/api/properties',
+            type: 'POST',
             data: function(d) {
                 // Add custom filters
                 d.region = $('#filter-region').val();
