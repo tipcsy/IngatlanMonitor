@@ -316,6 +316,7 @@ app = Flask(__name__)
 
 OLLAMA_URL   = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
+DEEPL_API_KEY = os.environ.get("DEEPL_API_KEY", "")
 
 # Cache-busting: minden Flask indításkor új verzió → böngésző letölti a friss JS/CSS-t
 _STATIC_VERSION = str(int(time.time()))
@@ -703,6 +704,36 @@ def api_geocode():
         "airport_km": airport_km,
         "maps_url": maps_url,
     })
+
+
+@app.route("/api/translate", methods=["POST"])
+def api_translate():
+    """Teljes szöveg fordítása DeepL API-val magyarra."""
+    if not DEEPL_API_KEY:
+        return jsonify({"error": "DEEPL_API_KEY nincs beállítva"}), 503
+
+    data = request.get_json()
+    text = (data or {}).get("text", "").strip()
+    if not text:
+        return jsonify({"error": "Nincs szöveg"}), 400
+
+    try:
+        payload = urllib.parse.urlencode({
+            "auth_key": DEEPL_API_KEY,
+            "text": text,
+            "target_lang": "HU",
+        }).encode()
+        req = urllib.request.Request(
+            "https://api-free.deepl.com/v2/translate",
+            data=payload,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read())
+        translated = result["translations"][0]["text"]
+        return jsonify({"translated": translated})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
 
 
 @app.route("/api/calc_distances", methods=["POST"])
