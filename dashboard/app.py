@@ -536,7 +536,8 @@ def api_update_property(prop_id):
         "portal", "city", "price_eur", "size_m2", "sea_km",
         "parking", "garden", "garden_m2", "airport", "airport_km",
         "latitude", "longitude", "score", "legal_status",
-        "reason", "property_url", "user_notes", "has_garage", "description_hu",
+        "reason", "property_url", "user_notes", "has_garage",
+        "description_hu", "original_text",
     }
     updates = {k: v for k, v in data.items() if k in allowed_fields}
 
@@ -731,8 +732,8 @@ def api_create_property():
                 email_id, email_date, portal, city, region, airport, airport_km,
                 sea_km, latitude, longitude, price_eur, size_m2, parking, garden,
                 score, legal_status, reason, property_url, gmail_url, maps_url,
-                garden_m2, user_notes, has_garage
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                garden_m2, user_notes, has_garage, description_hu, original_text
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             manual_id,
             datetime.utcnow().isoformat(),
@@ -757,6 +758,8 @@ def api_create_property():
             data.get("garden_m2"),
             data.get("user_notes"),
             1 if data.get("has_garage") else 0,
+            data.get("description_hu"),
+            data.get("original_text"),
         ))
         conn.commit()
         new_id = cursor.lastrowid
