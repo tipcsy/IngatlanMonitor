@@ -18,8 +18,9 @@ RUN cp /app/ingatlan/RULES.md /app/RULES.md
 ENV DATA_DIR=/app/data
 
 # Cron job: 30 percenként fut
-RUN echo "*/30 * * * * root cd /app/ingatlan && python3 gmail_watcher.py >> /var/log/cron.log 2>&1" \
-    > /etc/cron.d/ingatlan \
+RUN echo "PATH=/usr/local/bin:/usr/bin:/bin" > /etc/cron.d/ingatlan \
+    && echo "*/30 * * * * root cd /app/ingatlan && python gmail_watcher.py >> /var/log/cron.log 2>&1" \
+    >> /etc/cron.d/ingatlan \
     && chmod 0644 /etc/cron.d/ingatlan
 
 COPY entrypoint.sh /entrypoint.sh
