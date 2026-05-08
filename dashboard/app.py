@@ -718,18 +718,28 @@ def api_translate():
         return jsonify({"error": "Nincs szöveg"}), 400
 
     try:
-        payload = urllib.parse.urlencode({
-            "auth_key": DEEPL_API_KEY,
-            "text": text,
-            "target_lang": "HU",
-        }).encode()
-        req = urllib.request.Request(
-            "https://api-free.deepl.com/v2/translate",
-            data=payload,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read())
+        if SCRAPING_OK:
+            resp = req_lib.post(
+                "https://api-free.deepl.com/v2/translate",
+                headers={"Authorization": f"DeepL-Auth-Key {DEEPL_API_KEY}"},
+                json={"text": [text], "target_lang": "HU"},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            result = resp.json()
+        else:
+            payload = urllib.parse.urlencode({
+                "auth_key": DEEPL_API_KEY,
+                "text": text,
+                "target_lang": "HU",
+            }).encode()
+            req_obj = urllib.request.Request(
+                "https://api-free.deepl.com/v2/translate",
+                data=payload,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            with urllib.request.urlopen(req_obj, timeout=30) as r:
+                result = json.loads(r.read())
         translated = result["translations"][0]["text"]
         return jsonify({"translated": translated})
     except Exception as e:
