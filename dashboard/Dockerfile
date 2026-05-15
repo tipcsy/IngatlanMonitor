@@ -21,4 +21,4 @@ ENV DATA_DIR=/app/data
 ENV FLASK_DEBUG=0
 
 # Run with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--timeout", "30", "app:app"]

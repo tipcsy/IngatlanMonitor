@@ -347,8 +347,9 @@ def migrate_db():
 
 def get_db():
     """SQLite kapcsolat létrehozása."""
-    conn = sqlite3.connect(str(DATABASE))
+    conn = sqlite3.connect(str(DATABASE), timeout=10)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 
@@ -601,15 +602,21 @@ def api_update_property(prop_id):
         updates["maps_url"] = f"https://www.google.com/maps?q={lat},{lon}" if lat and lon else None
 
     conn = get_db()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    set_clause = ", ".join(f"{k} = ?" for k in updates.keys())
-    values = list(updates.values()) + [prop_id]
+        set_clause = ", ".join(f"{k} = ?" for k in updates.keys())
+        values = list(updates.values()) + [prop_id]
 
-    cursor.execute(f"UPDATE properties SET {set_clause} WHERE id = ?", values)
-    conn.commit()
-    affected = cursor.rowcount
-    conn.close()
+        cursor.execute(f"UPDATE properties SET {set_clause} WHERE id = ?", values)
+        conn.commit()
+        affected = cursor.rowcount
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"PUT /api/properties/{prop_id} hiba: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
 
     if affected == 0:
         return jsonify({"error": "Not found"}), 404
@@ -898,23 +905,33 @@ def api_upload_image(prop_id):
     if ext not in ALLOWED_IMAGE_EXTENSIONS:
         return jsonify({"error": f"Nem engedélyezett formátum: {ext}"}), 400
 
-    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-    filename = f"{prop_id}_{uuid.uuid4().hex[:8]}.{ext}"
-    file.save(str(IMAGES_DIR / filename))
+    try:
+        IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+        filename = f"{prop_id}_{uuid.uuid4().hex[:8]}.{ext}"
+        file.save(str(IMAGES_DIR / filename))
+    except Exception as e:
+        app.logger.error(f"Képfájl mentési hiba prop {prop_id}: {e}", exc_info=True)
+        return jsonify({"error": f"Képfájl mentési hiba: {e}"}), 500
 
     # Régi kép törlése (ha volt)
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT image_path FROM properties WHERE id = ?", (prop_id,))
-    row = cursor.fetchone()
-    if row and row["image_path"]:
-        old_file = IMAGES_DIR / row["image_path"]
-        if old_file.exists():
-            old_file.unlink()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT image_path FROM properties WHERE id = ?", (prop_id,))
+        row = cursor.fetchone()
+        if row and row["image_path"]:
+            old_file = IMAGES_DIR / row["image_path"]
+            if old_file.exists():
+                old_file.unlink()
 
-    cursor.execute("UPDATE properties SET image_path = ? WHERE id = ?", (filename, prop_id))
-    conn.commit()
-    conn.close()
+        cursor.execute("UPDATE properties SET image_path = ? WHERE id = ?", (filename, prop_id))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"Kép DB frissítési hiba prop {prop_id}: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
 
     return jsonify({"success": True, "image_path": filename})
 
