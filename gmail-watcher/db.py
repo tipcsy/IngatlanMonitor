@@ -115,9 +115,10 @@ def save_property(email_id, email_date, portal, prop, property_url, gmail_url,
     if email_date:
         try:
             from email.utils import parsedate_to_datetime
-            parsed_date = parsedate_to_datetime(email_date).isoformat()
+            from datetime import timezone as _tz
+            parsed_date = parsedate_to_datetime(email_date).astimezone(_tz.utc).strftime("%Y-%m-%d %H:%M:%S")
         except Exception:
-            parsed_date = email_date
+            parsed_date = None
 
     try:
         cursor.execute("""
