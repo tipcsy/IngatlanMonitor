@@ -183,7 +183,12 @@
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Ingatlan URL</label>
-                        <input type="url" class="form-control form-control-sm" id="add-property-url" placeholder="https://...">
+                        <div class="input-group input-group-sm">
+                            <input type="url" class="form-control form-control-sm" id="add-property-url" placeholder="https://...">
+                            <button type="button" class="btn btn-outline-secondary" id="btn-open-property-url" title="Megnyitás új lapon" onclick="var u=$('#add-property-url').val().trim();if(u)window.open(u,'_blank');">
+                                <i class="bi bi-box-arrow-up-right"></i>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Sor 2: Ár, Méret -->
