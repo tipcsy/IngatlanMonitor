@@ -5,12 +5,16 @@ Dashboard konfiguráció
 import os
 from pathlib import Path
 
-# Adatbázis elérési út
-# Docker-ben: /app/data/ingatlan.db
-# Lokálisan: ../data/ingatlan.db
+# Adat könyvtár (képek, Lidl cache stb.)
 DATA_DIR = Path(os.environ.get("DATA_DIR", Path(__file__).parent.parent / "data"))
-DATABASE = DATA_DIR / "ingatlan.db"
 IMAGES_DIR = DATA_DIR / "images"
+
+# MariaDB kapcsolat
+DB_HOST = os.environ.get("DB_HOST", "192.168.31.104")
+DB_PORT = int(os.environ.get("DB_PORT", "3306"))
+DB_USER = os.environ.get("DB_USER", "root")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "Pagoda")
+DB_NAME = os.environ.get("DB_NAME", "ingatlan")
 
 # Flask konfiguráció
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
