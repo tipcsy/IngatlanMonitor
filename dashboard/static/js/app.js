@@ -347,6 +347,7 @@ function openEditModal(id) {
                 $('#addPropertyModalTitle').html('<i class="bi bi-pencil"></i> Ingatlan szerkesztése');
                 $('#btn-save-add').removeClass('btn-success').addClass('btn-primary')
                     .html('<i class="bi bi-check-lg"></i> Mentés');
+                $('#btn-archive-from-edit').show();
 
                 $('#add-url').val('');
                 setFetchStatus('', '');
@@ -451,6 +452,7 @@ function initAddPropertyModal() {
         propertyEditId = null;
         $('#addPropertyModalTitle').html('<i class="bi bi-plus-circle"></i> Új ingatlan felvétele');
         $('#btn-save-add').removeClass('btn-primary').addClass('btn-success').html('<i class="bi bi-check-lg"></i> Mentés');
+        $('#btn-archive-from-edit').hide();
     });
 
     // URL betöltés
@@ -605,6 +607,18 @@ function initAddPropertyModal() {
                 break;
             }
         }
+    });
+
+    // Archiválás a szerkesztő modalból
+    $('#btn-archive-from-edit').on('click', function() {
+        if (!propertyEditId) return;
+        if (!confirm('Biztosan archiválod ezt az ingatlant?')) return;
+        $.post(`/api/properties/${propertyEditId}/archive`, function() {
+            $('#addPropertyModal').modal('hide');
+            table.ajax.reload(null, false);
+        }).fail(function() {
+            alert('Archiválási hiba!');
+        });
     });
 
     // Mentés
