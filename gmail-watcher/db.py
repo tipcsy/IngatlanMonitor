@@ -1,66 +1,25 @@
 """
-SQLite adatbázis modul az IngatlanMonitor-hoz.
+MariaDB adatbázis modul az IngatlanMonitor-hoz.
 Az ingatlanok mentése és lekérdezése a dashboard számára.
 """
 
 import os
 import logging
-import sqlite3
+import pymysql
+import pymysql.cursors
 from pathlib import Path
 from datetime import datetime
 
 log = logging.getLogger(__name__)
 
-# Adatbázis elérési útja
-# Docker-ben: /app/data/ingatlan.db (megosztott volume, DATA_DIR env var-ból)
-# Lokálisan: ../data/ingatlan.db
 DATA_DIR = Path(os.environ.get("DATA_DIR", Path(__file__).parent.parent / "data"))
-DB_PATH = DATA_DIR / "ingatlan.db"
 
-# SQLite séma
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS properties (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email_id TEXT UNIQUE,
-    email_date DATETIME,
-    portal TEXT,
-    city TEXT,
-    region TEXT,
-    airport TEXT,
-    airport_km INTEGER,
-    sea_km INTEGER,
-    latitude REAL,
-    longitude REAL,
-    price_eur INTEGER,
-    size_m2 INTEGER,
-    parking TEXT,
-    garden TEXT,
-    score INTEGER,
-    legal_status TEXT,
-    reason TEXT,
-    property_url TEXT,
-    gmail_url TEXT,
-    maps_url TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    is_archived INTEGER DEFAULT 0,
-    is_favorite INTEGER DEFAULT 0,
-    garden_m2 INTEGER,
-    user_notes TEXT,
-    has_garage INTEGER DEFAULT 0,
-    original_text TEXT,
-    description_hu TEXT,
-    ikea_km INTEGER,
-    lidl_km INTEGER
-);
+DB_HOST = os.environ.get("DB_HOST", "192.168.31.104")
+DB_PORT = int(os.environ.get("DB_PORT", "3306"))
+DB_USER = os.environ.get("DB_USER", "root")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "***REMOVED***")
+DB_NAME = os.environ.get("DB_NAME", "ingatlan")
 
-CREATE INDEX IF NOT EXISTS idx_score ON properties(score);
-CREATE INDEX IF NOT EXISTS idx_airport ON properties(airport);
-CREATE INDEX IF NOT EXISTS idx_city ON properties(city);
-CREATE INDEX IF NOT EXISTS idx_is_archived ON properties(is_archived);
-CREATE INDEX IF NOT EXISTS idx_email_date ON properties(email_date);
-"""
-
-# Reptér → régió mapping
 AIRPORT_REGION = {
     "AGP": "Costa del Sol",
     "ALC": "Costa Blanca",
@@ -71,20 +30,63 @@ AIRPORT_REGION = {
 
 
 def get_db_connection():
-    """SQLite kapcsolat létrehozása."""
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
+    """MariaDB kapcsolat létrehozása."""
+    return pymysql.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        database=DB_NAME,
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
+        connect_timeout=10,
+        autocommit=False,
+    )
 
 
 def init_db():
-    """Adatbázis inicializálása (táblák létrehozása ha nem léteznek)."""
+    """Tábla létrehozása ha nem létezik."""
     conn = get_db_connection()
-    conn.executescript(SCHEMA)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS properties (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            email_id VARCHAR(255) UNIQUE,
+            email_date DATETIME,
+            portal VARCHAR(50),
+            city VARCHAR(255),
+            region VARCHAR(100),
+            airport VARCHAR(10),
+            airport_km INT,
+            sea_km INT,
+            latitude DOUBLE,
+            longitude DOUBLE,
+            price_eur INT,
+            size_m2 INT,
+            parking VARCHAR(20),
+            garden VARCHAR(20),
+            score INT,
+            legal_status VARCHAR(20),
+            reason TEXT,
+            property_url TEXT,
+            gmail_url TEXT,
+            maps_url TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            is_archived INT DEFAULT 0,
+            is_favorite INT DEFAULT 0,
+            garden_m2 INT,
+            user_notes TEXT,
+            image_path TEXT,
+            has_garage INT DEFAULT 0,
+            original_text MEDIUMTEXT,
+            description_hu MEDIUMTEXT,
+            ikea_km INT,
+            lidl_km INT
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """)
     conn.commit()
     conn.close()
-    log.info(f"[DB] Adatbázis inicializálva: {DB_PATH}")
+    log.info(f"[DB] MariaDB inicializálva: {DB_HOST}/{DB_NAME}")
 
 
 def save_property(email_id, email_date, portal, prop, property_url, gmail_url,
@@ -92,36 +94,23 @@ def save_property(email_id, email_date, portal, prop, property_url, gmail_url,
     """
     Ingatlan mentése az adatbázisba.
 
-    Args:
-        email_id: Gmail message ID (deduplikációhoz)
-        email_date: Email dátuma string formátumban
-        portal: Portál neve (idealista, kyero, stb.)
-        prop: AI értékelés dict (city, price_eur, score, stb.)
-        property_url: Ingatlan URL
-        gmail_url: Gmail link az emailhez
-        original_text: Eredeti e-mail szöveg (angol/spanyol)
-
     Returns:
         int: Beszúrt sor ID-ja, vagy None ha már létezett
     """
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Koordináták
     coords = prop.get("coords")
     lat = coords[0] if coords else None
     lon = coords[1] if coords else None
 
-    # Maps URL generálás
     maps_url = None
     if lat and lon:
         maps_url = f"https://www.google.com/maps?q={lat},{lon}"
 
-    # Régió meghatározása reptér alapján
     airport = prop.get("airport")
     region = AIRPORT_REGION.get(airport, "Egyéb")
 
-    # Email dátum parse
     parsed_date = None
     if email_date:
         try:
@@ -137,7 +126,7 @@ def save_property(email_id, email_date, portal, prop, property_url, gmail_url,
                 sea_km, latitude, longitude, price_eur, size_m2, parking, garden,
                 score, legal_status, reason, property_url, gmail_url, maps_url,
                 garden_m2, has_garage, original_text, description_hu, ikea_km, lidl_km
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             email_id,
             parsed_date,
@@ -170,7 +159,7 @@ def save_property(email_id, email_date, portal, prop, property_url, gmail_url,
         row_id = cursor.lastrowid
         log.info(f"[DB] Mentve: {prop.get('city')} | {prop.get('price_eur')} EUR | {prop.get('score')}/10 (ID: {row_id})")
         return row_id
-    except sqlite3.IntegrityError:
+    except pymysql.err.IntegrityError:
         log.info(f"[DB] Már létezik (kihagyva): {email_id[:20]}...")
         return None
     finally:
@@ -181,16 +170,14 @@ def get_property(prop_id):
     """Egy ingatlan lekérdezése ID alapján."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM properties WHERE id = ?", (prop_id,))
+    cursor.execute("SELECT * FROM properties WHERE id = %s", (prop_id,))
     row = cursor.fetchone()
     conn.close()
-    return dict(row) if row else None
+    return row
 
 
 def update_property(prop_id, **kwargs):
-    """
-    Ingatlan frissítése (garden_m2, user_notes, is_favorite, is_archived).
-    """
+    """Ingatlan frissítése."""
     allowed_fields = {"garden_m2", "user_notes", "is_favorite", "is_archived", "description_hu", "has_garage"}
     updates = {k: v for k, v in kwargs.items() if k in allowed_fields}
 
@@ -200,10 +187,10 @@ def update_property(prop_id, **kwargs):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    set_clause = ", ".join(f"{k} = ?" for k in updates.keys())
+    set_clause = ", ".join(f"{k} = %s" for k in updates.keys())
     values = list(updates.values()) + [prop_id]
 
-    cursor.execute(f"UPDATE properties SET {set_clause} WHERE id = ?", values)
+    cursor.execute(f"UPDATE properties SET {set_clause} WHERE id = %s", values)
     conn.commit()
     affected = cursor.rowcount
     conn.close()
@@ -212,33 +199,28 @@ def update_property(prop_id, **kwargs):
 
 
 def get_stats():
-    """Statisztikák lekérdezése a dashboard-hoz."""
+    """Statisztikák lekérdezése."""
     conn = get_db_connection()
     cursor = conn.cursor()
-
     stats = {}
 
-    # Összes aktív
-    cursor.execute("SELECT COUNT(*) FROM properties WHERE is_archived = 0")
-    stats["total"] = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) AS cnt FROM properties WHERE is_archived = 0")
+    stats["total"] = cursor.fetchone()["cnt"]
 
-    # 7+ pontosak
-    cursor.execute("SELECT COUNT(*) FROM properties WHERE score >= 7 AND is_archived = 0")
-    stats["high_score"] = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) AS cnt FROM properties WHERE score >= 7 AND is_archived = 0")
+    stats["high_score"] = cursor.fetchone()["cnt"]
 
-    # Kedvencek
-    cursor.execute("SELECT COUNT(*) FROM properties WHERE is_favorite = 1 AND is_archived = 0")
-    stats["favorites"] = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) AS cnt FROM properties WHERE is_favorite = 1 AND is_archived = 0")
+    stats["favorites"] = cursor.fetchone()["cnt"]
 
-    # Régiónként
     cursor.execute("""
-        SELECT region, COUNT(*) as count
+        SELECT region, COUNT(*) AS count
         FROM properties
         WHERE is_archived = 0
         GROUP BY region
         ORDER BY count DESC
     """)
-    stats["by_region"] = {row[0]: row[1] for row in cursor.fetchall()}
+    stats["by_region"] = {row["region"]: row["count"] for row in cursor.fetchall()}
 
     conn.close()
     return stats
