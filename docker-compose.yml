@@ -11,6 +11,11 @@ services:
       OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:cloud}
       DATA_DIR: /app/data
+      DB_HOST: ${DB_HOST:-192.168.31.104}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-Pagoda}
+      DB_NAME: ${DB_NAME:-ingatlan}
     volumes:
       - /mnt/truenas_share/Program_Files/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
       - /mnt/truenas_share/Program_Files/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
