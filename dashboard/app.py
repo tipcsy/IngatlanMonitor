@@ -7,14 +7,17 @@ Flask alkalmazás az ingatlanok táblázatos megjelenítésére.
 import json
 import math
 import re
-import sqlite3
 import urllib.parse
 import urllib.request
 import uuid
 from datetime import datetime
 
+import pymysql
+import pymysql.cursors
+
 from flask import Flask, render_template, jsonify, request, send_from_directory
-from config import DATABASE, REGIONS, AIRPORT_NAMES, IMAGES_DIR
+from config import DATA_DIR, REGIONS, AIRPORT_NAMES, IMAGES_DIR
+from config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
 
 try:
     import requests as req_lib
@@ -80,10 +83,8 @@ def nearest_coast_km(lat, lon):
 
 def nearest_lidl_km(lat, lon):
     try:
-        from config import DATABASE
         import json as _json
-        from pathlib import Path as _Path
-        cache = _Path(str(DATABASE)).parent / "lidl_stores.json"
+        cache = DATA_DIR / "lidl_stores.json"
         if not cache.exists():
             return None
         stores = _json.loads(cache.read_text(encoding="utf-8"))
@@ -325,35 +326,66 @@ app.jinja_env.globals['static_ver'] = _STATIC_VERSION
 ALLOWED_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp', 'gif'}
 
 
-def migrate_db():
-    """Új oszlopok hozzáadása ha még nem léteznek."""
-    conn = sqlite3.connect(str(DATABASE))
-    new_columns = [
-        ("image_path", "TEXT"),
-        ("has_garage", "INTEGER DEFAULT 0"),
-        ("original_text", "TEXT"),
-        ("description_hu", "TEXT"),
-        ("ikea_km", "INTEGER"),
-        ("lidl_km", "INTEGER"),
-    ]
-    for col, col_type in new_columns:
-        try:
-            conn.execute(f"ALTER TABLE properties ADD COLUMN {col} {col_type}")
-            conn.commit()
-        except sqlite3.OperationalError:
-            pass  # már létezik
+def get_db():
+    """MariaDB kapcsolat létrehozása."""
+    return pymysql.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        database=DB_NAME,
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
+        connect_timeout=10,
+        autocommit=False,
+    )
+
+
+def init_db():
+    """Tábla és oszlopok létrehozása ha még nem léteznek."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS properties (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            email_id VARCHAR(255) UNIQUE,
+            email_date DATETIME,
+            portal VARCHAR(50),
+            city VARCHAR(255),
+            region VARCHAR(100),
+            airport VARCHAR(10),
+            airport_km INT,
+            sea_km INT,
+            latitude DOUBLE,
+            longitude DOUBLE,
+            price_eur INT,
+            size_m2 INT,
+            parking VARCHAR(20),
+            garden VARCHAR(20),
+            score INT,
+            legal_status VARCHAR(20),
+            reason TEXT,
+            property_url TEXT,
+            gmail_url TEXT,
+            maps_url TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            is_archived INT DEFAULT 0,
+            is_favorite INT DEFAULT 0,
+            garden_m2 INT,
+            user_notes TEXT,
+            image_path TEXT,
+            has_garage INT DEFAULT 0,
+            original_text MEDIUMTEXT,
+            description_hu MEDIUMTEXT,
+            ikea_km INT,
+            lidl_km INT
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """)
+    conn.commit()
     conn.close()
 
 
-def get_db():
-    """SQLite kapcsolat létrehozása."""
-    conn = sqlite3.connect(str(DATABASE), timeout=60)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
-
-
-migrate_db()
+init_db()
 
 
 @app.route("/")
@@ -428,39 +460,39 @@ def api_properties():
         where_clauses.append("is_favorite = 1")
 
     if region:
-        where_clauses.append("region = ?")
+        where_clauses.append("region = %s")
         params.append(region)
 
     if min_price > 0:
-        where_clauses.append("price_eur >= ?")
+        where_clauses.append("price_eur >= %s")
         params.append(min_price)
 
     if max_price > 0:
-        where_clauses.append("price_eur <= ?")
+        where_clauses.append("price_eur <= %s")
         params.append(max_price)
 
     if min_size > 0:
-        where_clauses.append("size_m2 >= ?")
+        where_clauses.append("size_m2 >= %s")
         params.append(min_size)
 
     if min_score > 0:
-        where_clauses.append("score >= ?")
+        where_clauses.append("score >= %s")
         params.append(min_score)
 
     if search_value:
-        where_clauses.append("(city LIKE ? OR reason LIKE ? OR user_notes LIKE ?)")
+        where_clauses.append("(city LIKE %s OR reason LIKE %s OR user_notes LIKE %s)")
         search_pattern = f"%{search_value}%"
         params.extend([search_pattern, search_pattern, search_pattern])
 
     where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
 
     # Összes rekord (szűrés nélkül)
-    cursor.execute("SELECT COUNT(*) FROM properties WHERE is_archived = 0")
-    total_records = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) AS cnt FROM properties WHERE is_archived = 0")
+    total_records = cursor.fetchone()["cnt"]
 
     # Szűrt rekordok száma
-    cursor.execute(f"SELECT COUNT(*) FROM properties WHERE {where_sql}", params)
-    filtered_records = cursor.fetchone()[0]
+    cursor.execute(f"SELECT COUNT(*) AS cnt FROM properties WHERE {where_sql}", params)
+    filtered_records = cursor.fetchone()["cnt"]
 
     # Rendezés validálás
     if order_dir not in ("asc", "desc"):
@@ -476,7 +508,7 @@ def api_properties():
         FROM properties
         WHERE {where_sql}
         ORDER BY {order_column} {order_dir}
-        LIMIT ? OFFSET ?
+        LIMIT %s OFFSET %s
     """
     cursor.execute(query, params + [length, start])
     rows = cursor.fetchall()
@@ -535,23 +567,23 @@ def api_stats():
 
     stats = {}
 
-    cursor.execute("SELECT COUNT(*) FROM properties WHERE is_archived = 0")
-    stats["total"] = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) AS cnt FROM properties WHERE is_archived = 0")
+    stats["total"] = cursor.fetchone()["cnt"]
 
-    cursor.execute("SELECT COUNT(*) FROM properties WHERE score >= 7 AND is_archived = 0")
-    stats["high_score"] = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) AS cnt FROM properties WHERE score >= 7 AND is_archived = 0")
+    stats["high_score"] = cursor.fetchone()["cnt"]
 
-    cursor.execute("SELECT COUNT(*) FROM properties WHERE is_favorite = 1 AND is_archived = 0")
-    stats["favorites"] = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) AS cnt FROM properties WHERE is_favorite = 1 AND is_archived = 0")
+    stats["favorites"] = cursor.fetchone()["cnt"]
 
     cursor.execute("""
-        SELECT region, COUNT(*) as count
+        SELECT region, COUNT(*) AS count
         FROM properties
         WHERE is_archived = 0
         GROUP BY region
         ORDER BY count DESC
     """)
-    stats["by_region"] = {row[0]: row[1] for row in cursor.fetchall()}
+    stats["by_region"] = {row["region"]: row["count"] for row in cursor.fetchall()}
 
     conn.close()
     return jsonify(stats)
@@ -562,14 +594,14 @@ def api_get_property(prop_id):
     """Egy ingatlan lekérdezése szerkesztéshez."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM properties WHERE id = ?", (prop_id,))
+    cursor.execute("SELECT * FROM properties WHERE id = %s", (prop_id,))
     row = cursor.fetchone()
     conn.close()
 
     if not row:
         return jsonify({"error": "Not found"}), 404
 
-    return jsonify(dict(row))
+    return jsonify(row)
 
 
 @app.route("/api/properties/<int:prop_id>", methods=["PUT"])
@@ -605,10 +637,10 @@ def api_update_property(prop_id):
     try:
         cursor = conn.cursor()
 
-        set_clause = ", ".join(f"{k} = ?" for k in updates.keys())
+        set_clause = ", ".join(f"{k} = %s" for k in updates.keys())
         values = list(updates.values()) + [prop_id]
 
-        cursor.execute(f"UPDATE properties SET {set_clause} WHERE id = ?", values)
+        cursor.execute(f"UPDATE properties SET {set_clause} WHERE id = %s", values)
         conn.commit()
         affected = cursor.rowcount
     except Exception as e:
@@ -630,14 +662,14 @@ def api_toggle_favorite(prop_id):
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT is_favorite FROM properties WHERE id = ?", (prop_id,))
+    cursor.execute("SELECT is_favorite FROM properties WHERE id = %s", (prop_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
         return jsonify({"error": "Not found"}), 404
 
     new_value = 0 if row["is_favorite"] else 1
-    cursor.execute("UPDATE properties SET is_favorite = ? WHERE id = ?", (new_value, prop_id))
+    cursor.execute("UPDATE properties SET is_favorite = %s WHERE id = %s", (new_value, prop_id))
     conn.commit()
     conn.close()
 
@@ -650,14 +682,14 @@ def api_toggle_archive(prop_id):
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT is_archived FROM properties WHERE id = ?", (prop_id,))
+    cursor.execute("SELECT is_archived FROM properties WHERE id = %s", (prop_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
         return jsonify({"error": "Not found"}), 404
 
     new_value = 0 if row["is_archived"] else 1
-    cursor.execute("UPDATE properties SET is_archived = ? WHERE id = ?", (new_value, prop_id))
+    cursor.execute("UPDATE properties SET is_archived = %s WHERE id = %s", (new_value, prop_id))
     conn.commit()
     conn.close()
 
@@ -850,7 +882,7 @@ def api_create_property():
                 sea_km, latitude, longitude, price_eur, size_m2, parking, garden,
                 score, legal_status, reason, property_url, gmail_url, maps_url,
                 garden_m2, user_notes, has_garage, description_hu, original_text, ikea_km, lidl_km
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             manual_id,
             datetime.utcnow().isoformat(),
@@ -882,7 +914,7 @@ def api_create_property():
         ))
         conn.commit()
         new_id = cursor.lastrowid
-    except sqlite3.IntegrityError as e:
+    except pymysql.err.IntegrityError as e:
         conn.close()
         return jsonify({"error": str(e)}), 409
     finally:
@@ -917,14 +949,14 @@ def api_upload_image(prop_id):
     conn = get_db()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT image_path FROM properties WHERE id = ?", (prop_id,))
+        cursor.execute("SELECT image_path FROM properties WHERE id = %s", (prop_id,))
         row = cursor.fetchone()
         if row and row["image_path"]:
             old_file = IMAGES_DIR / row["image_path"]
             if old_file.exists():
                 old_file.unlink()
 
-        cursor.execute("UPDATE properties SET image_path = ? WHERE id = ?", (filename, prop_id))
+        cursor.execute("UPDATE properties SET image_path = %s WHERE id = %s", (filename, prop_id))
         conn.commit()
     except Exception as e:
         conn.rollback()
