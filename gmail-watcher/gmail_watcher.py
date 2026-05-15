@@ -856,8 +856,12 @@ def process_message(details, service=None):
         details["link"] = matched_link
 
         # Gmail URL generálása
-        email_id = details.get("id")
-        gmail_url = f"https://mail.google.com/mail/u/0/#inbox/{email_id}" if email_id else ""
+        msg_id = details.get("id")
+        gmail_url = f"https://mail.google.com/mail/u/0/#inbox/{msg_id}" if msg_id else ""
+
+        # Egyedi email_id: message_id + URL hash (ha több ingatlan van egy emailben)
+        url_hash = str(abs(hash(matched_link)))[:8]
+        email_id = f"{msg_id}_{url_hash}" if msg_id else f"manual_{url_hash}"
 
         # Minden értékelt ingatlant mentjük az adatbázisba
         try:
@@ -871,7 +875,7 @@ def process_message(details, service=None):
                 original_text=details.get("body", ""),
             )
             if row_id and service:
-                extract_and_save_email_image(service, email_id, row_id)
+                extract_and_save_email_image(service, msg_id, row_id)
         except Exception as e:
             log.error(f"[DB] Mentési hiba ({city}): {e}")
 
