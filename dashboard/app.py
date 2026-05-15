@@ -347,7 +347,7 @@ def migrate_db():
 
 def get_db():
     """SQLite kapcsolat létrehozása."""
-    conn = sqlite3.connect(str(DATABASE), timeout=10)
+    conn = sqlite3.connect(str(DATABASE), timeout=60)
     conn.row_factory = sqlite3.Row
     return conn
 
