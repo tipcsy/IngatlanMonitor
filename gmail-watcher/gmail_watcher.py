@@ -275,15 +275,25 @@ def extract_all_property_links(html):
         r'https?://(?:www\.)?kyero\.com/[^\s"\'<>]*property/\d+[^\s"\'<>]*',
         r'https?://(?:www\.)?thinkspain\.com/property-for-sale/\d+[^\s"\'<>]*',
         r'https?://(?:www\.)?fotocasa\.es/[^\s"\'<>]*\d+[^\s"\'<>]*',
-        r'https?://(?:www\.)?immoweb\.be/[^\s"\'<>]+',
+        # immoweb.be linkek gyakran email-tracking wrapperben érkeznek (pl. AWS SES
+        # "awstrack.me" click-tracking), ahol a valódi immoweb.be cél-URL percent-encode-olva
+        # van beágyazva (pl. https://xxx.awstrack.me/L0/https:%2F%2Fwww.immoweb.be%2F...) —
+        # ezért itt nem kötjük ki, hogy a link literálisan immoweb.be-vel kezdődjön.
+        r'https?://[^\s"\'<>]*immoweb\.be[^\s"\'<>]*',
     ]
     for pattern in patterns:
         for m in re.finditer(pattern, html):
             url = m.group(0).rstrip(">,")
-            # Egyedi ID kinyerése (duplikátum szűrés) — az utolsó számsor a linkben,
-            # mert pl. immoweb URL-eknél a hirdetés-ID a végén van, előtte irányítószám is szerepelhet
-            id_matches = re.findall(r'(\d+)', url)
-            key = id_matches[-1] if id_matches else url
+            # Egyedi ID kinyerése (duplikátum szűrés). A "classified" utáni számsort
+            # preferáljuk (immoweb hirdetés-ID), mert tracking-wrapperes URL-eknél a
+            # query string paraméterei (pl. idmetrics=1) félrevezetnék az "utolsó
+            # számsor" heurisztikát.
+            classified_match = re.search(r'classified(?:%2F|/)(\d+)', url, re.IGNORECASE)
+            if classified_match:
+                key = classified_match.group(1)
+            else:
+                id_matches = re.findall(r'(\d+)', url)
+                key = id_matches[-1] if id_matches else url
             if key not in seen:
                 seen.add(key)
                 links.append(url)
