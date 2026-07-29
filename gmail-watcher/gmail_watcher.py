@@ -767,10 +767,15 @@ IMPORTANT: Respond ONLY with valid JSON, no extra text:
             text = result.get("response", "").strip()
 
         json_match = re.search(r'\{.*\}', text, re.DOTALL)
-        if json_match:
+        if not json_match:
+            log.warning(f"[AI] JSON nem található a válaszban: {text[:500]}")
+            return None
+
+        try:
             return json.loads(json_match.group(0))
-        else:
-            log.warning(f"[AI] JSON nem található a válaszban: {text[:200]}")
+        except json.JSONDecodeError as e:
+            log.error(f"[AI] Hibás JSON a modell válaszában ({OLLAMA_MODEL}): {e}")
+            log.error(f"[AI] Nyers válasz (első 1500 karakter): {json_match.group(0)[:1500]}")
             return None
 
     except Exception as e:
