@@ -77,6 +77,11 @@ RULES_FILES   = {
 
 GMAIL_LABEL = "Hírlevelek/Ingatlan"
 
+# Hány alkalommal próbálkozzunk újra egy emaillel, ha az AI kiértékelés sikertelen
+# (pl. timeout) — ez után véglegesen feladjuk és feldolgozottnak jelöljük, hogy egy
+# tartósan hibás email ne akassza meg örökre a többi feldolgozását.
+AI_MAX_RETRIES = 3
+
 PORTALS = [
     "idealista.com",
     "kyero.com",
@@ -158,7 +163,7 @@ def load_state():
     if STATE_FILE.exists():
         with open(STATE_FILE, encoding="utf-8") as f:
             return json.load(f)
-    return {"processed_ids": []}
+    return {"processed_ids": [], "failed_attempts": {}}
 
 def save_state(state):
     with open(STATE_FILE, "w", encoding="utf-8") as f:
@@ -757,7 +762,7 @@ IMPORTANT: Respond ONLY with valid JSON, no extra text:
             data=data,
             headers={"Content-Type": "application/json"}
         )
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with urllib.request.urlopen(req, timeout=240) as resp:
             result = json.loads(resp.read())
             text = result.get("response", "").strip()
 
@@ -881,8 +886,8 @@ def process_message(details, service=None):
 
     result = evaluate_with_ai(details, country)
     if not result:
-        log.warning("[AI] Értékelés sikertelen, kihagyva.")
-        return 0
+        log.warning("[AI] Értékelés sikertelen.")
+        return None
 
     properties = result.get("properties", [])
     sent = 0
@@ -1026,38 +1031,65 @@ def _run_inner():
     new_messages = fetch_new_messages(service, label_id, state)
     log.info(f"{len(new_messages)} új üzenet a mappában.")
 
-    processed_ids  = list(state.get("processed_ids", []))
-    total_sent     = 0
-    total_skipped  = 0
-    total_analyzed = 0
+    processed_ids   = list(state.get("processed_ids", []))
+    failed_attempts = dict(state.get("failed_attempts", {}))
+    total_sent      = 0
+    total_skipped   = 0
+    total_analyzed  = 0
+    total_deferred  = 0
 
     for msg in new_messages:
-        details = get_message_details(service, msg["id"])
-        processed_ids.append(msg["id"])
+        msg_id  = msg["id"]
+        details = get_message_details(service, msg_id)
 
         # Nem támogatott portál (jelenleg: ES = idealista/kyero/thinkspain/fotocasa, BE = immoweb)
         if not is_active_portal(details["sender"]):
             total_skipped += 1
             log.info(f"[SKIP] Nem támogatott portál: {details['sender'][:50]}")
+            processed_ids.append(msg_id)
+            failed_attempts.pop(msg_id, None)
             continue
 
         # Hírlevél / nem ajánlat
         if is_newsletter(details["subject"]):
             total_skipped += 1
             log.info(f"[SKIP] Hírlevél: {details['subject'][:60]}")
+            processed_ids.append(msg_id)
+            failed_attempts.pop(msg_id, None)
             continue
 
         total_analyzed += 1
         sent = process_message(details, service=service)
+
+        if sent is None:
+            # AI kiértékelés sikertelen (pl. timeout) — korlátozott számban újrapróbáljuk
+            # a következő futásoknál, ahelyett hogy örökre elveszne az email.
+            attempts = failed_attempts.get(msg_id, 0) + 1
+            if attempts >= AI_MAX_RETRIES:
+                log.warning(f"[AI] {msg_id}: {attempts}. sikertelen próbálkozás, feladva és kihagyva.")
+                processed_ids.append(msg_id)
+                failed_attempts.pop(msg_id, None)
+            else:
+                failed_attempts[msg_id] = attempts
+                total_deferred += 1
+                log.info(f"[AI] {msg_id}: újra próbálkozás a következő futáskor ({attempts}/{AI_MAX_RETRIES}).")
+            continue
+
+        failed_attempts.pop(msg_id, None)
+        processed_ids.append(msg_id)
         total_sent += sent
 
     # State mentése
-    state["processed_ids"] = processed_ids[-500:]
+    state["processed_ids"]   = processed_ids[-500:]
+    state["failed_attempts"] = failed_attempts
     state["last_run"] = datetime.now(timezone.utc).isoformat()
     save_state(state)
 
     log.info(f"{'='*60}")
-    log.info(f"Kész! Elemzett: {total_analyzed} | Telegram értesítő: {total_sent} | Kihagyva: {total_skipped}")
+    log.info(
+        f"Kész! Elemzett: {total_analyzed} | Telegram értesítő: {total_sent} | "
+        f"Kihagyva: {total_skipped} | Újrapróbálásra vár: {total_deferred}"
+    )
     log.info(f"{'='*60}")
 
 if __name__ == "__main__":
