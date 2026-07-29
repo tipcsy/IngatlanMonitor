@@ -887,6 +887,9 @@ def process_message(details, service=None):
     log.info(f"Email: {details['subject'][:70]}")
     log.info(f"Portal: {identify_portal(details['sender'])}")
 
+    all_links = details.get("all_links", [])
+    log.info(f"Felismert linkek a levélben: {len(all_links)} db" + (f" — {all_links}" if not all_links else ""))
+
     country = get_portal_country(details["sender"]) or "ES"
 
     result = evaluate_with_ai(details, country)
