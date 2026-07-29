@@ -2,7 +2,10 @@
 import re
 import sys
 sys.path.insert(0, ".")
-from gmail_watcher import get_gmail_service, get_label_id, fetch_new_messages, get_message_details, extract_body
+from gmail_watcher import (
+    get_gmail_service, get_label_id, fetch_new_messages, get_message_details,
+    extract_body, extract_all_property_links,
+)
 
 service  = get_gmail_service()
 state    = {"processed_ids": []}
@@ -31,4 +34,9 @@ for msg, d in immoweb_msgs[:1]:
 
     immoweb_hits = [h for h in hrefs if "immoweb" in h.lower()]
     print(f"'immoweb' szót tartalmazó href-ek: {len(immoweb_hits)} db")
+
+    extracted = extract_all_property_links(html)
+    print(f"\nextract_all_property_links() eredménye: {len(extracted)} egyedi link")
+    for l in extracted:
+        print(f"  - {l[:150]}")
     print("─" * 70)
