@@ -279,7 +279,9 @@ def extract_all_property_links(html):
         # "awstrack.me" click-tracking), ahol a valódi immoweb.be cél-URL percent-encode-olva
         # van beágyazva (pl. https://xxx.awstrack.me/L0/https:%2F%2Fwww.immoweb.be%2F...) —
         # ezért itt nem kötjük ki, hogy a link literálisan immoweb.be-vel kezdődjön.
-        r'https?://[^\s"\'<>]*immoweb\.be[^\s"\'<>]*',
+        # A "classified" útvonal megkövetelése kiszűri a főoldal-linket és a kép-URL-eket
+        # (pl. image.my.immoweb.be/.../valami.png), amik nem hirdetéshez vezetnek.
+        r'https?://[^\s"\'<>]*immoweb\.be[^\s"\'<>]*classified[^\s"\'<>]*',
     ]
     for pattern in patterns:
         for m in re.finditer(pattern, html):
