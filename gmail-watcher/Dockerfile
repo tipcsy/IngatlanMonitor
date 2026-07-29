@@ -11,8 +11,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . /app/ingatlan
 
-# RULES.md a konténer gyökerébe kell (BASE_DIR.parent = /app)
-RUN cp /app/ingatlan/RULES.md /app/RULES.md
+# RULES.md / RULES_BE.md a konténer gyökerébe kell (BASE_DIR.parent = /app)
+RUN cp /app/ingatlan/RULES.md /app/RULES.md \
+    && cp /app/ingatlan/RULES_BE.md /app/RULES_BE.md
 
 # Adatbázis mappa
 ENV DATA_DIR=/app/data

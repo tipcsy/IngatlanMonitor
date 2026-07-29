@@ -70,6 +70,10 @@ CLIENT_SECRET = BASE_DIR / "client_secret.json"
 TOKEN_FILE    = BASE_DIR / "token.pickle"
 STATE_FILE    = BASE_DIR / "state.json"
 RULES_FILE    = BASE_DIR.parent / "RULES.md"
+RULES_FILES   = {
+    "ES": RULES_FILE,
+    "BE": BASE_DIR.parent / "RULES_BE.md",
+}
 
 GMAIL_LABEL = "Hírlevelek/Ingatlan"
 
@@ -81,6 +85,14 @@ PORTALS = [
 ]
 
 ALL_PORTALS = PORTALS + ["ingatlan.com", "immoweb.be", "koltozzbe.hu"]
+
+# Ország → aktívan feldolgozott portálok. Új ország (pl. NL) hozzáadásakor csak
+# egy új kulcsot + portállistát kell felvenni ide (és lentebb AIRPORTS_<CC> / CAPITALS-t).
+COUNTRY_PORTALS = {
+    "ES": PORTALS,
+    "BE": ["immoweb.be"],
+}
+ACTIVE_PORTALS = [p for portals in COUNTRY_PORTALS.values() for p in portals]
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
@@ -258,13 +270,15 @@ def extract_all_property_links(html):
         r'https?://(?:www\.)?kyero\.com/[^\s"\'<>]*property/\d+[^\s"\'<>]*',
         r'https?://(?:www\.)?thinkspain\.com/property-for-sale/\d+[^\s"\'<>]*',
         r'https?://(?:www\.)?fotocasa\.es/[^\s"\'<>]*\d+[^\s"\'<>]*',
+        r'https?://(?:www\.)?immoweb\.be/[^\s"\'<>]+',
     ]
     for pattern in patterns:
         for m in re.finditer(pattern, html):
             url = m.group(0).rstrip(">,")
-            # Egyedi ID kinyerése (duplikátum szűrés)
-            id_match = re.search(r'/(\d+)', url)
-            key = id_match.group(1) if id_match else url
+            # Egyedi ID kinyerése (duplikátum szűrés) — az utolsó számsor a linkben,
+            # mert pl. immoweb URL-eknél a hirdetés-ID a végén van, előtte irányítószám is szerepelhet
+            id_matches = re.findall(r'(\d+)', url)
+            key = id_matches[-1] if id_matches else url
             if key not in seen:
                 seen.add(key)
                 links.append(url)
@@ -287,6 +301,18 @@ def identify_portal(sender):
 def is_spanish_portal(sender):
     s = sender.lower()
     return any(p in s for p in PORTALS)
+
+def get_portal_country(sender):
+    """Visszaadja az email küldője alapján az ország kódját (ES/BE), vagy None-t ha nem támogatott portál."""
+    s = sender.lower()
+    for country, portals in COUNTRY_PORTALS.items():
+        if any(p in s for p in portals):
+            return country
+    return None
+
+def is_active_portal(sender):
+    """True, ha a küldő egy általunk feldolgozott (ES vagy BE) portálról jött."""
+    return get_portal_country(sender) is not None
 
 def is_newsletter(subject):
     """Hírlevelek és nem-ajánlat emailek kiszűrése."""
@@ -314,11 +340,12 @@ def extract_main_city(city_name):
     # Ha csak egy rész van, azt adjuk vissza
     return parts[-1].strip() if len(parts) > 1 else parts[0].strip()
 
-def geocode_city(city_name, country="Spain"):
+def geocode_city(city_name, country="ES"):
     """Város koordinátáinak lekérése Nominatim-tól (OpenStreetMap)."""
     # Valódi település típusok (szigetek, vizek kizárva)
     GOOD_TYPES = {"city", "town", "village", "hamlet", "municipality", "suburb", "quarter", "neighbourhood"}
     BAD_TYPES  = {"islet", "island", "water", "bay", "coastline", "cape", "beach"}
+    countrycodes = COUNTRY_ISO.get(country, "es")
     # Próbálkozási sorrend: teljes string → első rész (kis falu) → utolsó rész (önkormányzat)
     parts = [p.strip() for p in city_name.split(",")]
     candidates = [city_name]
@@ -328,7 +355,7 @@ def geocode_city(city_name, country="Spain"):
         query = urllib.parse.quote(name)
         url   = (
             f"https://nominatim.openstreetmap.org/search"
-            f"?q={query}&format=json&limit=5&countrycodes=es&addressdetails=0"
+            f"?q={query}&format=json&limit=5&countrycodes={countrycodes}&addressdetails=0"
         )
         req = urllib.request.Request(url, headers={"User-Agent": "openclaw-ingatlan-watcher/1.0"})
         try:
@@ -356,18 +383,27 @@ def geocode_city(city_name, country="Spain"):
             log.warning(f"[Geo] Nominatim hiba ({name}): {e}")
     return None, None
 
-def nearest_airport(lat, lon):
-    """Legközelebbi reptér és távolsága."""
+def nearest_airport(lat, lon, country="ES"):
+    """Legközelebbi (Budapestről közvetlen járattal elérhető) reptér és távolsága, ország szerint."""
+    airports = AIRPORTS if country == "ES" else AIRPORTS_BY_COUNTRY.get(country, {})
     best_code, best_name, best_km = None, None, 9999
-    for code, (alat, alon, name) in AIRPORTS.items():
+    for code, (alat, alon, name) in airports.items():
         km = haversine(lat, lon, alat, alon)
         if km < best_km:
             best_km, best_code, best_name = km, code, name
     return best_code, best_name, round(best_km)
 
 def nearest_coast_km(lat, lon):
-    """Becsült távolság a legközelebbi tengerparti ponttól."""
+    """Becsült távolság a legközelebbi tengerparti ponttól (csak Spanyolországra van adatunk)."""
     return round(min(haversine(lat, lon, clat, clon) for clat, clon in COAST_POINTS))
+
+def capital_distance_km(lat, lon, country):
+    """Távolság az adott ország fővárosától km-ben, vagy None ha nincs adatunk a fővárosról."""
+    capital = CAPITALS.get(country)
+    if not capital:
+        return None
+    clat, clon, _ = capital
+    return round(haversine(lat, lon, clat, clon))
 
 def nearest_ikea_km(lat, lon):
     """Legközelebbi IKEA távolsága km-ben."""
@@ -502,29 +538,43 @@ def nearest_lidl_km(lat, lon):
         return None
     return round(min(haversine(lat, lon, slat, slon) for slat, slon in stores))
 
-def geo_lookup(city):
-    """Városnév alapján reptér, tenger, IKEA és Lidl távolság becslése."""
+def geo_lookup(city, country="ES"):
+    """Városnév alapján reptér, főváros, tenger, IKEA és Lidl távolság becslése (ország-függő)."""
+    empty = (None, None, None, None, None, None, None)
     if not city or city in ("?", "ismeretlen", "Costa del Sol"):
-        return None, None, None, None, None, None
-    lat, lon = geocode_city(city)
+        return empty
+    lat, lon = geocode_city(city, country)
     if lat is None:
-        return None, None, None, None, None, None
-    apt_code, apt_name, apt_km = nearest_airport(lat, lon)
-    sea_km = nearest_coast_km(lat, lon)
-    ikea_km = nearest_ikea_km(lat, lon)
-    lidl_km = nearest_lidl_km(lat, lon)
-    log.info(f"[Geo] {city} → reptér: {apt_code} {apt_km} km | tenger: ~{sea_km} km | IKEA: ~{ikea_km} km | Lidl: ~{lidl_km} km")
-    return apt_code, apt_km, sea_km, (lat, lon), ikea_km, lidl_km
+        return empty
+    apt_code, apt_name, apt_km = nearest_airport(lat, lon, country)
+    cap_km = capital_distance_km(lat, lon, country)
+    if country == "ES":
+        sea_km = nearest_coast_km(lat, lon)
+        ikea_km = nearest_ikea_km(lat, lon)
+        lidl_km = nearest_lidl_km(lat, lon)
+    else:
+        # IKEA/Lidl adatbázis és tenger-referenciapontok jelenleg csak Spanyolországra vannak felvéve
+        sea_km = None
+        ikea_km = None
+        lidl_km = None
+    log.info(
+        f"[Geo] {city} ({country}) → reptér: {apt_code} {apt_km} km | főváros: ~{cap_km} km"
+        f"{f' | tenger: ~{sea_km} km' if sea_km is not None else ''}"
+        f"{f' | IKEA: ~{ikea_km} km' if ikea_km is not None else ''}"
+        f"{f' | Lidl: ~{lidl_km} km' if lidl_km is not None else ''}"
+    )
+    return apt_code, apt_km, sea_km, (lat, lon), ikea_km, lidl_km, cap_km
 
 # ── AI értékelés ──────────────────────────────────────────────────────────────
 
-def load_rules():
-    if RULES_FILE.exists():
-        return RULES_FILE.read_text(encoding="utf-8")
+def load_rules(country="ES"):
+    rules_file = RULES_FILES.get(country, RULES_FILE)
+    if rules_file.exists():
+        return rules_file.read_text(encoding="utf-8")
     return ""
 
 OLLAMA_URL   = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "minimax-m3:cloud")
 
 # IKEA áruházak Spanyolországban (lat, lon, város)
 IKEA_STORES = [
@@ -557,6 +607,32 @@ AIRPORTS = {
     "BIO": (43.3011, -2.9106, "Bilbao"),
 }
 
+# Belga reptér koordináták — csak Budapestről közvetlen járattal (Zaventem, Charleroi)
+AIRPORTS_BE = {
+    "BRU": (50.9014, 4.4844, "Brüsszel - Zaventem"),
+    "CRL": (50.4592, 4.4525, "Brüsszel - Charleroi"),
+}
+
+# Ország kód → reptér-dict, a spanyoltól eltérő országokhoz (bővíthető pl. "NL"-lel)
+AIRPORTS_BY_COUNTRY = {
+    "BE": AIRPORTS_BE,
+}
+
+# Minden reptér együtt, kódok szerint (kódok egyediek) — pl. Telegram-üzenet reptérnév-kereséséhez
+ALL_AIRPORTS = {**AIRPORTS, **AIRPORTS_BE}
+
+# Fővárosok (lat, lon, magyar név) — távolságszámításhoz (pl. Brüsszel Belgiumnál kötelező szűrő)
+CAPITALS = {
+    "ES": (40.4168, -3.7038, "Madrid"),
+    "BE": (50.8503, 4.3517, "Brüsszel"),
+}
+
+# Nominatim countrycodes paraméter országkódonként
+COUNTRY_ISO = {
+    "ES": "es",
+    "BE": "be",
+}
+
 # Spanyol tengerparti régiók közelítő pontjai (lat, lon)
 # Ezeket használjuk ha nincs jobb adat
 COAST_POINTS = [
@@ -572,12 +648,25 @@ COAST_POINTS = [
     (41.3809,  2.1228), (41.7281,  2.9320),
 ]
 
-def evaluate_with_ai(details):
+# Ország-specifikus "Airports to check" szöveg az AI promptban
+AIRPORTS_PROMPT_TEXT = {
+    "ES": """- Malaga (AGP) - Costa del Sol
+- Alicante (ALC) - Costa Blanca
+- Murcia-Corvera (RMU) - Costa Calida
+- Valencia (VLC) - Valencia region
+- Bilbao (BIO) - Basque Country""",
+    "BE": """- Brussels-Zaventem (BRU)
+- Brussels-Charleroi (CRL)""",
+}
+
+def evaluate_with_ai(details, country="ES"):
     """
-    Ollama helyi AI-val értékeli ki az ingatlant a RULES.md alapján.
-    Visszatér egy dict-tel: properties lista
+    Ollama helyi AI-val értékeli ki az ingatlant az adott ország szabályrendszere
+    (RULES.md / RULES_BE.md) alapján. Visszatér egy dict-tel: properties lista
     """
-    rules = load_rules()
+    rules = load_rules(country)
+    airports_text = AIRPORTS_PROMPT_TEXT.get(country, AIRPORTS_PROMPT_TEXT["ES"])
+    airport_codes = "/".join(AIRPORTS_BY_COUNTRY.get(country, AIRPORTS).keys()) if country != "ES" else "AGP/ALC/RMU/VLC/BIO"
 
     # ThinkSpain: strukturált lista link+cím+ár párokkal
     ts_props = details.get("ts_props", [])
@@ -612,8 +701,11 @@ Body:
    - city: location name — for small villages use "Village, Municipality" format (e.g. "Isla Plana, Cartagena" or "Benahadux, Almería"). For large cities just the city name is fine.
    - price_eur: price as integer (0 if unknown)
    - size_m2: living area in m² as integer (0 if unknown)
+   - rooms: number of bedrooms/rooms as integer (0 if unknown)
+   - bathrooms: number of bathrooms as integer (0 if unknown)
    - garden_m2: garden area in m² as integer (null if unknown or no garden)
-   - sea_km: distance to sea in km as number (null if unknown)
+   - sea_km: distance to sea in km as number (null if unknown or not applicable)
+   - capital_km: distance to the country's capital in km as number (null if unknown)
    - parking: "igen" / "nem" / "ismeretlen"
    - garden: "igen" / "nem" / "ismeretlen"
    - has_garage: true if the listing explicitly mentions a garage, false otherwise
@@ -623,12 +715,8 @@ Body:
    - description_hu: a 3-5 sentence Hungarian summary of the key property features (size, garden, garage, location highlights, condition, special features). Translate the most important details from the original listing text.
    - link: property URL if found in email, else empty string
 
-Airports to check distance from (max 100km):
-- Malaga (AGP) - Costa del Sol
-- Alicante (ALC) - Costa Blanca
-- Murcia-Corvera (RMU) - Costa Calida
-- Valencia (VLC) - Valencia region
-- Bilbao (BIO) - Basque Country
+Airports to check distance from:
+{airports_text}
 
 IMPORTANT: Respond ONLY with valid JSON, no extra text:
 {{
@@ -637,9 +725,12 @@ IMPORTANT: Respond ONLY with valid JSON, no extra text:
       "city": "...",
       "price_eur": 0,
       "size_m2": 0,
+      "rooms": 0,
+      "bathrooms": 0,
       "garden_m2": null,
       "sea_km": null,
-      "airport": "AGP/ALC/RMU/VLC/BIO or null",
+      "capital_km": null,
+      "airport": "{airport_codes} or null",
       "airport_km": null,
       "parking": "igen/nem/ismeretlen",
       "garden": "igen/nem/ismeretlen",
@@ -730,10 +821,20 @@ def format_telegram_message(details, prop):
     ]
     if prop.get("size_m2"):
         lines.append(f"📐 {prop['size_m2']} m²")
+    if prop.get("rooms") or prop.get("bathrooms"):
+        rb = []
+        if prop.get("rooms"):
+            rb.append(f"{prop['rooms']} szoba")
+        if prop.get("bathrooms"):
+            rb.append(f"{prop['bathrooms']} fürdő")
+        lines.append(f"🛏️ {' / '.join(rb)}")
     if prop.get("sea_km") is not None:
         lines.append(f"🌊 Tenger: ~{prop['sea_km']} km")
+    if prop.get("capital_km") is not None:
+        capital_name = CAPITALS.get(prop.get("country"), (0, 0, "Főváros"))[2]
+        lines.append(f"🏛️ {capital_name}: ~{prop['capital_km']} km")
     if prop.get("airport") and prop.get("airport_km") is not None:
-        apt_name = AIRPORTS.get(prop["airport"], ("","",""))[2]
+        apt_name = ALL_AIRPORTS.get(prop["airport"], ("", "", ""))[2]
         lines.append(f"✈️ {prop['airport']} ({apt_name}): ~{prop['airport_km']} km")
 
     parking = {"igen": "✅", "nem": "❌", "ismeretlen": "❓"}.get(prop.get("parking", ""), "❓")
@@ -776,7 +877,9 @@ def process_message(details, service=None):
     log.info(f"Email: {details['subject'][:70]}")
     log.info(f"Portal: {identify_portal(details['sender'])}")
 
-    result = evaluate_with_ai(details)
+    country = get_portal_country(details["sender"]) or "ES"
+
+    result = evaluate_with_ai(details, country)
     if not result:
         log.warning("[AI] Értékelés sikertelen, kihagyva.")
         return 0
@@ -788,9 +891,10 @@ def process_message(details, service=None):
         score = prop.get("score", 0)
         legal = prop.get("legal_status", "ok")
         city  = prop.get("city", "?")
+        prop["country"] = country
 
         # Geo lookup — Nominatim alapján pontos számítás
-        apt_code, apt_km, sea_km, coords, ikea_km, lidl_km = geo_lookup(city)
+        apt_code, apt_km, sea_km, coords, ikea_km, lidl_km, cap_km = geo_lookup(city, country)
         if apt_code:
             prop["airport"]    = apt_code
             prop["airport_km"] = apt_km
@@ -800,12 +904,14 @@ def process_message(details, service=None):
             prop["ikea_km"] = ikea_km
         if lidl_km is not None:
             prop["lidl_km"] = lidl_km
+        if cap_km is not None:
+            prop["capital_km"] = cap_km
         # Koordináták mentése a térkép linkhez
         if coords:
             prop["coords"] = coords
 
-        # Fallback a statikus táblázatból ha a Nominatim sem ment
-        if not prop.get("airport") or not prop.get("airport_km"):
+        # Fallback a statikus táblázatból ha a Nominatim sem ment (csak ES-re van fallback táblánk)
+        if country == "ES" and (not prop.get("airport") or not prop.get("airport_km")):
             city_key = city.lower().strip()
             for key, (apt, km) in CITY_AIRPORT_MAP.items():
                 if key in city_key or city_key in key:
@@ -899,6 +1005,16 @@ def run():
     # Adatbázis inicializálása
     init_db()
 
+    try:
+        _run_inner()
+    except Exception:
+        # Fontos: minden itt el nem kapott kivétel a konténer stderr-jébe (cron.log) menne,
+        # nem a rotálódó gmail_watcher.log-ba — így korábban egy elakadt OAuth token miatt
+        # hetekig észrevétlenül állt le a feldolgozás. Ezért itt mindig naplózzuk.
+        log.exception("Watcher futás megszakadt egy kezeletlen hiba miatt")
+
+
+def _run_inner():
     service = get_gmail_service()
     state   = load_state()
 
@@ -919,10 +1035,10 @@ def run():
         details = get_message_details(service, msg["id"])
         processed_ids.append(msg["id"])
 
-        # Nem spanyol portál
-        if not is_spanish_portal(details["sender"]):
+        # Nem támogatott portál (jelenleg: ES = idealista/kyero/thinkspain/fotocasa, BE = immoweb)
+        if not is_active_portal(details["sender"]):
             total_skipped += 1
-            log.info(f"[SKIP] Nem spanyol portál: {details['sender'][:50]}")
+            log.info(f"[SKIP] Nem támogatott portál: {details['sender'][:50]}")
             continue
 
         # Hírlevél / nem ajánlat

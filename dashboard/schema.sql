@@ -27,7 +27,11 @@ CREATE TABLE IF NOT EXISTS properties (
     is_archived INTEGER DEFAULT 0,           -- Archivált (soft delete)
     is_favorite INTEGER DEFAULT 0,           -- Kedvenc jelölés
     garden_m2 INTEGER,                       -- Kert mérete m²-ben (utólag szerkeszthető)
-    user_notes TEXT                          -- Szabad megjegyzés (felhasználó által írható)
+    user_notes TEXT,                         -- Szabad megjegyzés (felhasználó által írható)
+    country TEXT DEFAULT 'ES',               -- Ország kódja (ES/BE, később NL stb.)
+    rooms INTEGER,                           -- Szobák száma
+    bathrooms INTEGER,                       -- Fürdőszobák száma
+    capital_km INTEGER                       -- Távolság a fővárostól (pl. Brüsszel BE-nél)
 );
 
 -- Indexek a gyors szűréshez

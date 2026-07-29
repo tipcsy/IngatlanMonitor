@@ -50,6 +50,15 @@
     <div class="card-body">
         <div class="row g-2">
             <div class="col-md-2">
+                <label class="form-label">Ország</label>
+                <select class="form-select form-select-sm" id="filter-country">
+                    <option value="">Összes</option>
+                    {% for code, name in countries.items() %}
+                    <option value="{{ code }}">{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label">Régió</label>
                 <select class="form-select form-select-sm" id="filter-region">
                     <option value="">Összes</option>
@@ -108,10 +117,14 @@
                 <tr>
                     <th>Kép</th>
                     <th>Pont</th>
+                    <th>Ország</th>
                     <th>Város</th>
                     <th>Ár (EUR)</th>
                     <th>Méret (m²)</th>
+                    <th>Szoba</th>
+                    <th>Fürdő</th>
                     <th>Tenger</th>
+                    <th>Főváros km</th>
                     <th>Reptér</th>
                     <th>Rept. km</th>
                     <th>Parkolás</th>
@@ -161,7 +174,15 @@
 
                 <!-- Mezők -->
                 <div class="row g-3">
-                    <!-- Sor 1: Portál, Város -->
+                    <!-- Sor 1: Ország, Portál, Város -->
+                    <div class="col-md-2">
+                        <label class="form-label">Ország</label>
+                        <select class="form-select form-select-sm" id="add-country">
+                            {% for code, name in countries.items() %}
+                            <option value="{{ code }}">{{ name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                     <div class="col-md-3">
                         <label class="form-label">Portál</label>
                         <select class="form-select form-select-sm" id="add-portal">
@@ -170,9 +191,10 @@
                             <option value="kyero.com">kyero.com</option>
                             <option value="thinkspain.com">thinkspain.com</option>
                             <option value="fotocasa.es">fotocasa.es</option>
+                            <option value="immoweb.be">immoweb.be</option>
                         </select>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <label class="form-label">Város / Helyszín</label>
                         <div class="input-group input-group-sm">
                             <input type="text" class="form-control" id="add-city" placeholder="pl. Torrevieja">
@@ -191,7 +213,7 @@
                         </div>
                     </div>
 
-                    <!-- Sor 2: Ár, Méret -->
+                    <!-- Sor 2: Ár, Méret, Szobák -->
                     <div class="col-md-3">
                         <label class="form-label">Ár (EUR)</label>
                         <input type="number" class="form-control form-control-sm" id="add-price" placeholder="pl. 195000">
@@ -201,12 +223,24 @@
                         <input type="number" class="form-control form-control-sm" id="add-size" placeholder="pl. 120">
                     </div>
                     <div class="col-md-3">
+                        <label class="form-label">Szobák száma</label>
+                        <input type="number" class="form-control form-control-sm" id="add-rooms" placeholder="pl. 3">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Fürdőszobák száma</label>
+                        <input type="number" class="form-control form-control-sm" id="add-bathrooms" placeholder="pl. 2">
+                    </div>
+                    <div class="col-md-3">
                         <label class="form-label">Kert mérete (m²)</label>
                         <input type="number" class="form-control form-control-sm" id="add-garden-m2" placeholder="pl. 200">
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Tenger távolsága (km)</label>
                         <input type="number" class="form-control form-control-sm" id="add-sea-km" placeholder="pl. 3">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Főváros távolsága (km)</label>
+                        <input type="number" class="form-control form-control-sm" id="add-capital-km" placeholder="pl. 25">
                     </div>
 
                     <!-- Sor 3: Parkolás, Garázs, Kert, Reptér -->

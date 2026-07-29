@@ -16,7 +16,7 @@ import pymysql
 import pymysql.cursors
 
 from flask import Flask, render_template, jsonify, request, send_from_directory
-from config import DATA_DIR, REGIONS, AIRPORT_NAMES, IMAGES_DIR
+from config import DATA_DIR, REGIONS, AIRPORT_NAMES, IMAGES_DIR, COUNTRIES
 from config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
 
 try:
@@ -34,6 +34,26 @@ AIRPORTS_COORDS = {
     "RMU": (37.8030, -1.1253),
     "VLC": (39.4893, -0.4816),
     "BIO": (43.3011, -2.9106),
+    "BRU": (50.9014, 4.4844),
+    "CRL": (50.4592, 4.4525),
+}
+
+# Ország → repülőtér-kódok, hogy find_nearest_airport csak a releváns országéiban keressen
+AIRPORTS_BY_COUNTRY = {
+    "ES": ["AGP", "ALC", "RMU", "VLC", "BIO"],
+    "BE": ["BRU", "CRL"],
+}
+
+# Fővárosok (lat, lon) — capital_km számításhoz
+CAPITALS = {
+    "ES": (40.4168, -3.7038),
+    "BE": (50.8503, 4.3517),
+}
+
+# Nominatim countrycodes paraméter országkódonként
+COUNTRY_ISO = {
+    "ES": "es",
+    "BE": "be",
 }
 
 
@@ -64,13 +84,23 @@ COAST_POINTS = [
 ]
 
 
-def find_nearest_airport(lat, lon):
+def find_nearest_airport(lat, lon, country="ES"):
+    codes = AIRPORTS_BY_COUNTRY.get(country, list(AIRPORTS_COORDS.keys()))
     best, best_d = None, float("inf")
-    for code, (alat, alon) in AIRPORTS_COORDS.items():
+    for code in codes:
+        alat, alon = AIRPORTS_COORDS[code]
         d = haversine(lat, lon, alat, alon)
         if d < best_d:
             best_d, best = d, code
     return best, best_d
+
+
+def capital_distance_km(lat, lon, country="ES"):
+    capital = CAPITALS.get(country)
+    if not capital:
+        return None
+    clat, clon = capital
+    return haversine(lat, lon, clat, clon)
 
 
 def nearest_ikea_km(lat, lon):
@@ -95,12 +125,14 @@ def nearest_lidl_km(lat, lon):
         return None
 
 
-def geocode_city_nominatim(city_name):
+def geocode_city_nominatim(city_name, country="ES"):
+    countrycodes = COUNTRY_ISO.get(country, "es")
     q = urllib.parse.urlencode({
-        "q": f"{city_name}, Spain",
+        "q": city_name,
         "format": "json",
         "limit": 3,
         "addressdetails": 1,
+        "countrycodes": countrycodes,
     })
     url = f"https://nominatim.openstreetmap.org/search?{q}"
     req = urllib.request.Request(
@@ -118,21 +150,33 @@ def geocode_city_nominatim(city_name):
 
 def detect_portal(url):
     u = url.lower()
-    for p in ["idealista.com", "kyero.com", "thinkspain.com", "fotocasa.es"]:
+    for p in ["idealista.com", "kyero.com", "thinkspain.com", "fotocasa.es", "immoweb.be"]:
         if p in u:
             return p
     return "egyéb"
 
 
+PORTAL_COUNTRY = {
+    "idealista.com": "ES",
+    "kyero.com": "ES",
+    "thinkspain.com": "ES",
+    "fotocasa.es": "ES",
+    "immoweb.be": "BE",
+}
+
+
 def scrape_property(url):
     """Ingatlan adatok kinyerése URL-ből. Visszaad mindent amit sikerül."""
+    portal = detect_portal(url)
     result = {
         "property_url": url,
-        "portal": detect_portal(url),
+        "portal": portal,
+        "country": PORTAL_COUNTRY.get(portal, "ES"),
         "city": None, "price_eur": None, "size_m2": None,
+        "rooms": None, "bathrooms": None,
         "parking": None, "garden": None,
         "latitude": None, "longitude": None,
-        "airport": None, "airport_km": None, "sea_km": None,
+        "airport": None, "airport_km": None, "sea_km": None, "capital_km": None,
         "original_text": None,
         "error": None,
     }
@@ -316,7 +360,7 @@ import time
 app = Flask(__name__)
 
 OLLAMA_URL   = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "minimax-m3:cloud")
 DEEPL_API_KEY = os.environ.get("DEEPL_API_KEY", "")
 
 # Cache-busting: minden Flask indításkor új verzió → böngésző letölti a friss JS/CSS-t
@@ -378,9 +422,20 @@ def init_db():
             original_text MEDIUMTEXT,
             description_hu MEDIUMTEXT,
             ikea_km INT,
-            lidl_km INT
+            lidl_km INT,
+            country VARCHAR(2) DEFAULT 'ES',
+            rooms INT,
+            bathrooms INT,
+            capital_km INT
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """)
+    for ddl in (
+        "ALTER TABLE properties ADD COLUMN IF NOT EXISTS country VARCHAR(2) DEFAULT 'ES'",
+        "ALTER TABLE properties ADD COLUMN IF NOT EXISTS rooms INT",
+        "ALTER TABLE properties ADD COLUMN IF NOT EXISTS bathrooms INT",
+        "ALTER TABLE properties ADD COLUMN IF NOT EXISTS capital_km INT",
+    ):
+        cursor.execute(ddl)
     conn.commit()
     conn.close()
 
@@ -391,7 +446,7 @@ init_db()
 @app.route("/")
 def index():
     """Dashboard főoldal."""
-    return render_template("index.html", regions=REGIONS, airports=AIRPORT_NAMES)
+    return render_template("index.html", regions=REGIONS, airports=AIRPORT_NAMES, countries=COUNTRIES)
 
 
 @app.route("/api/properties", methods=["GET", "POST"])
@@ -424,6 +479,7 @@ def api_properties():
 
     # Egyedi szűrők
     region = p.get("region", "")
+    country = p.get("country", "")
     min_price = get_int("min_price", 0)
     max_price = get_int("max_price", 0)
     min_size = get_int("min_size", 0)
@@ -436,14 +492,21 @@ def api_properties():
     order_dir = p.get("order[0][dir]", "desc")
 
     # Oszlop mapping (DataTables index → SQL oszlop), 0. = kép (nem rendezhető)
+    # Sorrend a template táblafejlécével egyezik: Kép, Pont, Ország, Város, Ár, Méret, Szoba, Fürdő,
+    # Tenger, Főváros km, Reptér, Rept.km, Parkolás, Garázs, Kert, Kert m², IKEA, Lidl, Jogi, Indoklás,
+    # Jegyzet, Linkek, Dátum, Műveletek
     columns = [
         None,
-        "score", "city", "price_eur", "size_m2", "sea_km",
+        "score", "country", "city", "price_eur", "size_m2", "rooms", "bathrooms",
+        "sea_km", "capital_km",
         "airport", "airport_km", "parking", "has_garage", "garden", "garden_m2",
         "ikea_km", "lidl_km", "legal_status", "reason", "user_notes", "property_url", "email_date", "id"
     ]
     col = columns[order_column_idx] if order_column_idx < len(columns) else None
-    _numeric_cols = {"price_eur", "size_m2", "sea_km", "airport_km", "garden_m2", "ikea_km", "lidl_km", "score"}
+    _numeric_cols = {
+        "price_eur", "size_m2", "sea_km", "airport_km", "garden_m2", "ikea_km", "lidl_km",
+        "score", "rooms", "bathrooms", "capital_km",
+    }
     if col in _numeric_cols:
         order_column = f"CAST({col} AS INTEGER)"
     else:
@@ -462,6 +525,10 @@ def api_properties():
     if region:
         where_clauses.append("region = %s")
         params.append(region)
+
+    if country:
+        where_clauses.append("country = %s")
+        params.append(country)
 
     if min_price > 0:
         where_clauses.append("price_eur >= %s")
@@ -504,7 +571,8 @@ def api_properties():
                sea_km, latitude, longitude, price_eur, size_m2, parking, garden,
                score, legal_status, reason, property_url, gmail_url, maps_url,
                is_archived, is_favorite, garden_m2, user_notes, image_path,
-               has_garage, description_hu, ikea_km, lidl_km
+               has_garage, description_hu, ikea_km, lidl_km,
+               country, rooms, bathrooms, capital_km
         FROM properties
         WHERE {where_sql}
         ORDER BY {order_column} {order_dir}
@@ -547,6 +615,10 @@ def api_properties():
             "description_hu": row["description_hu"],
             "ikea_km": row["ikea_km"],
             "lidl_km": row["lidl_km"],
+            "country": row["country"],
+            "rooms": row["rooms"],
+            "bathrooms": row["bathrooms"],
+            "capital_km": row["capital_km"],
         })
 
     conn.close()
@@ -585,6 +657,15 @@ def api_stats():
     """)
     stats["by_region"] = {row["region"]: row["count"] for row in cursor.fetchall()}
 
+    cursor.execute("""
+        SELECT country, COUNT(*) AS count
+        FROM properties
+        WHERE is_archived = 0
+        GROUP BY country
+        ORDER BY count DESC
+    """)
+    stats["by_country"] = {row["country"]: row["count"] for row in cursor.fetchall()}
+
     conn.close()
     return jsonify(stats)
 
@@ -617,6 +698,7 @@ def api_update_property(prop_id):
         "latitude", "longitude", "score", "legal_status",
         "reason", "property_url", "user_notes", "has_garage",
         "description_hu", "original_text", "ikea_km", "lidl_km",
+        "country", "rooms", "bathrooms", "capital_km",
     }
     updates = {k: v for k, v in data.items() if k in allowed_fields}
 
@@ -705,22 +787,25 @@ def api_scrape():
 
     url = data["url"].strip()
     result = scrape_property(url)
+    country = result.get("country") or "ES"
 
     # Geo számítás koordinátákból vagy városból
     lat = result.get("latitude")
     lon = result.get("longitude")
     if lat and lon:
-        airport, airport_km = find_nearest_airport(lat, lon)
+        airport, airport_km = find_nearest_airport(lat, lon, country)
         result["airport"] = airport
         result["airport_km"] = airport_km
+        result["capital_km"] = capital_distance_km(lat, lon, country)
     elif result.get("city"):
-        lat, lon = geocode_city_nominatim(result["city"])
+        lat, lon = geocode_city_nominatim(result["city"], country)
         if lat and lon:
             result["latitude"] = lat
             result["longitude"] = lon
-            airport, airport_km = find_nearest_airport(lat, lon)
+            airport, airport_km = find_nearest_airport(lat, lon, country)
             result["airport"] = airport
             result["airport_km"] = airport_km
+            result["capital_km"] = capital_distance_km(lat, lon, country)
 
     return jsonify(result)
 
@@ -730,14 +815,16 @@ def api_geocode():
     """Város geocoding: koordináták + legközelebbi reptér."""
     data = request.get_json()
     city = (data or {}).get("city", "").strip()
+    country = (data or {}).get("country") or "ES"
     if not city:
         return jsonify({"error": "city megadása kötelező"}), 400
 
-    lat, lon = geocode_city_nominatim(city)
+    lat, lon = geocode_city_nominatim(city, country)
     if not lat:
         return jsonify({"error": "Város nem található"}), 404
 
-    airport, airport_km = find_nearest_airport(lat, lon)
+    airport, airport_km = find_nearest_airport(lat, lon, country)
+    capital_km = capital_distance_km(lat, lon, country)
     maps_url = f"https://www.google.com/maps?q={lat},{lon}"
 
     return jsonify({
@@ -745,6 +832,7 @@ def api_geocode():
         "longitude": lon,
         "airport": airport,
         "airport_km": airport_km,
+        "capital_km": capital_km,
         "maps_url": maps_url,
     })
 
@@ -791,7 +879,7 @@ def api_translate():
 
 @app.route("/api/calc_distances", methods=["POST"])
 def api_calc_distances():
-    """Távolságok újraszámítása koordinátákból (reptér, tenger, IKEA, Lidl)."""
+    """Távolságok újraszámítása koordinátákból (reptér, főváros, tenger, IKEA, Lidl)."""
     data = request.get_json()
     try:
         lat = float(data.get("latitude"))
@@ -799,14 +887,22 @@ def api_calc_distances():
     except (TypeError, ValueError):
         return jsonify({"error": "Érvénytelen koordináták"}), 400
 
-    airport, airport_km = find_nearest_airport(lat, lon)
-    sea_km = nearest_coast_km(lat, lon)
-    ikea_km = nearest_ikea_km(lat, lon)
-    lidl_km = nearest_lidl_km(lat, lon)
+    country = (data or {}).get("country") or "ES"
+
+    airport, airport_km = find_nearest_airport(lat, lon, country)
+    capital_km = capital_distance_km(lat, lon, country)
+    # Tenger/IKEA/Lidl referenciapontok jelenleg csak Spanyolországra vannak felvéve
+    if country == "ES":
+        sea_km = nearest_coast_km(lat, lon)
+        ikea_km = nearest_ikea_km(lat, lon)
+        lidl_km = nearest_lidl_km(lat, lon)
+    else:
+        sea_km = ikea_km = lidl_km = None
 
     return jsonify({
         "airport": airport,
         "airport_km": airport_km,
+        "capital_km": capital_km,
         "sea_km": sea_km,
         "ikea_km": ikea_km,
         "lidl_km": lidl_km,
@@ -881,8 +977,9 @@ def api_create_property():
                 email_id, email_date, portal, city, region, airport, airport_km,
                 sea_km, latitude, longitude, price_eur, size_m2, parking, garden,
                 score, legal_status, reason, property_url, gmail_url, maps_url,
-                garden_m2, user_notes, has_garage, description_hu, original_text, ikea_km, lidl_km
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                garden_m2, user_notes, has_garage, description_hu, original_text, ikea_km, lidl_km,
+                country, rooms, bathrooms, capital_km
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             manual_id,
             datetime.utcnow().isoformat(),
@@ -911,6 +1008,10 @@ def api_create_property():
             data.get("original_text"),
             data.get("ikea_km"),
             data.get("lidl_km"),
+            data.get("country") or "ES",
+            data.get("rooms"),
+            data.get("bathrooms"),
+            data.get("capital_km"),
         ))
         conn.commit()
         new_id = cursor.lastrowid

@@ -27,6 +27,8 @@ REGIONS = {
     "RMU": "Costa Cálida",
     "VLC": "Valencia",
     "BIO": "País Vasco",
+    "BRU": "Brüsszel környéke",
+    "CRL": "Brüsszel környéke",
 }
 
 # Reptér nevek (tooltip-ekhez)
@@ -36,4 +38,12 @@ AIRPORT_NAMES = {
     "RMU": "Murcia-Corvera",
     "VLC": "Valencia",
     "BIO": "Bilbao",
+    "BRU": "Brüsszel - Zaventem",
+    "CRL": "Brüsszel - Charleroi",
+}
+
+# Országok — a dashboard ország-szűrőjéhez. Bővíthető pl. "NL": "Hollandia"-val, ha lesz rá portál.
+COUNTRIES = {
+    "ES": "Spanyolország",
+    "BE": "Belgium",
 }
