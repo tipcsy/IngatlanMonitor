@@ -26,6 +26,8 @@ AIRPORT_REGION = {
     "RMU": "Costa Cálida",
     "VLC": "Valencia",
     "BIO": "País Vasco",
+    "BRU": "Brüsszel környéke",
+    "CRL": "Brüsszel környéke",
 }
 
 
@@ -81,9 +83,21 @@ def init_db():
             original_text MEDIUMTEXT,
             description_hu MEDIUMTEXT,
             ikea_km INT,
-            lidl_km INT
+            lidl_km INT,
+            country VARCHAR(2) DEFAULT 'ES',
+            rooms INT,
+            bathrooms INT,
+            capital_km INT
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """)
+    # Meglévő (már élő) táblák bővítése, ha korábbi verzióból frissítünk
+    for ddl in (
+        "ALTER TABLE properties ADD COLUMN IF NOT EXISTS country VARCHAR(2) DEFAULT 'ES'",
+        "ALTER TABLE properties ADD COLUMN IF NOT EXISTS rooms INT",
+        "ALTER TABLE properties ADD COLUMN IF NOT EXISTS bathrooms INT",
+        "ALTER TABLE properties ADD COLUMN IF NOT EXISTS capital_km INT",
+    ):
+        cursor.execute(ddl)
     conn.commit()
     conn.close()
     log.info(f"[DB] MariaDB inicializálva: {DB_HOST}/{DB_NAME}")
@@ -126,8 +140,9 @@ def save_property(email_id, email_date, portal, prop, property_url, gmail_url,
                 email_id, email_date, portal, city, region, airport, airport_km,
                 sea_km, latitude, longitude, price_eur, size_m2, parking, garden,
                 score, legal_status, reason, property_url, gmail_url, maps_url,
-                garden_m2, has_garage, original_text, description_hu, ikea_km, lidl_km
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                garden_m2, has_garage, original_text, description_hu, ikea_km, lidl_km,
+                country, rooms, bathrooms, capital_km
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             email_id,
             parsed_date,
@@ -155,6 +170,10 @@ def save_property(email_id, email_date, portal, prop, property_url, gmail_url,
             prop.get("description_hu"),
             prop.get("ikea_km"),
             prop.get("lidl_km"),
+            prop.get("country", "ES"),
+            prop.get("rooms"),
+            prop.get("bathrooms"),
+            prop.get("capital_km"),
         ))
         conn.commit()
         row_id = cursor.lastrowid

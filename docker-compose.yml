@@ -9,7 +9,7 @@ services:
       TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
       OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:cloud}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-minimax-m3:cloud}
       DATA_DIR: /app/data
       DB_HOST: ${DB_HOST:-192.168.31.104}
       DB_PORT: ${DB_PORT:-3306}
@@ -40,7 +40,7 @@ services:
       DATA_DIR: /app/data
       FLASK_DEBUG: "0"
       OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:cloud}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-minimax-m3:cloud}
       DEEPL_API_KEY: ${DEEPL_API_KEY:-4992a9e3-3af6-45ef-a665-9421ae5e4776:fx}
       DB_HOST: ${DB_HOST:-192.168.31.104}
       DB_PORT: ${DB_PORT:-3306}
@@ -65,7 +65,7 @@ services:
       TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
       OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:cloud}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-minimax-m3:cloud}
       DATA_DIR: /app/data
     volumes:
       - /mnt/truenas_share/Program_Files/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
@@ -84,7 +84,7 @@ services:
       TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
       OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:cloud}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-minimax-m3:cloud}
       DATA_DIR: /app/data
     volumes:
       - /mnt/truenas_share/Program_Files/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
@@ -103,7 +103,7 @@ services:
       TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
       OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:cloud}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-minimax-m3:cloud}
       DATA_DIR: /app/data
     volumes:
       - /mnt/truenas_share/Program_Files/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro

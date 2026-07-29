@@ -8,7 +8,14 @@ const AIRPORT_NAMES = {
     'ALC': 'Alicante - Costa Blanca',
     'RMU': 'Murcia-Corvera - Costa Cálida',
     'VLC': 'Valencia',
-    'BIO': 'Bilbao - País Vasco'
+    'BIO': 'Bilbao - País Vasco',
+    'BRU': 'Brüsszel - Zaventem',
+    'CRL': 'Brüsszel - Charleroi'
+};
+
+const COUNTRY_NAMES = {
+    'ES': 'Spanyolország',
+    'BE': 'Belgium'
 };
 
 // DataTable instance
@@ -59,6 +66,7 @@ function initDataTable() {
             type: 'POST',
             data: function(d) {
                 // Add custom filters
+                d.country = $('#filter-country').val();
                 d.region = $('#filter-region').val();
                 d.min_price = $('#filter-min-price').val() || 0;
                 d.max_price = $('#filter-max-price').val() || 0;
@@ -88,6 +96,14 @@ function initDataTable() {
                     return `<span class="score-badge ${cls}">${data}</span>`;
                 }
             },
+            // Country
+            {
+                data: 'country',
+                render: function(data) {
+                    if (!data) return '-';
+                    return `<span class="airport-code" title="${COUNTRY_NAMES[data] || data}">${data}</span>`;
+                }
+            },
             // City
             { data: 'city' },
             // Price
@@ -105,11 +121,32 @@ function initDataTable() {
                     return data ? `${data} m²` : '-';
                 }
             },
+            // Rooms
+            {
+                data: 'rooms',
+                render: function(data) {
+                    return data ? `${data}` : '-';
+                }
+            },
+            // Bathrooms
+            {
+                data: 'bathrooms',
+                render: function(data) {
+                    return data ? `${data}` : '-';
+                }
+            },
             // Sea distance
             {
                 data: 'sea_km',
                 render: function(data) {
                     return data !== null ? `${data} km` : '-';
+                }
+            },
+            // Capital distance
+            {
+                data: 'capital_km',
+                render: function(data) {
+                    return data !== null && data !== undefined ? `${data} km` : '-';
                 }
             },
             // Airport
@@ -314,12 +351,13 @@ function initFilters() {
         }, 300);
     };
 
-    $('#filter-region, #filter-min-score').on('change', applyFilters);
+    $('#filter-country, #filter-region, #filter-min-score').on('change', applyFilters);
     $('#filter-min-price, #filter-max-price, #filter-min-size').on('input', applyFilters);
     $('#filter-favorites, #filter-archived').on('change', applyFilters);
 
     // Reset filters
     $('#btn-reset-filters').on('click', function() {
+        $('#filter-country').val('');
         $('#filter-region').val('');
         $('#filter-min-price').val('');
         $('#filter-max-price').val('');
@@ -352,13 +390,17 @@ function openEditModal(id) {
                 $('#add-url').val('');
                 setFetchStatus('', '');
 
+                $('#add-country').val(data.country || 'ES');
                 $('#add-portal').val(data.portal || 'egyéb');
                 $('#add-city').val(data.city || '');
                 $('#add-property-url').val(data.property_url || '');
                 $('#add-price').val(data.price_eur !== null ? data.price_eur : '');
                 $('#add-size').val(data.size_m2 !== null ? data.size_m2 : '');
+                $('#add-rooms').val(data.rooms !== null ? data.rooms : '');
+                $('#add-bathrooms').val(data.bathrooms !== null ? data.bathrooms : '');
                 $('#add-garden-m2').val(data.garden_m2 !== null ? data.garden_m2 : '');
                 $('#add-sea-km').val(data.sea_km !== null ? data.sea_km : '');
+                $('#add-capital-km').val(data.capital_km !== null ? data.capital_km : '');
                 $('#add-parking').val(data.parking || 'ismeretlen');
                 $('#add-garden').val(data.garden || 'ismeretlen');
                 $('#add-airport').val(data.airport || '');
@@ -496,16 +538,21 @@ function initAddPropertyModal() {
             url: '/api/calc_distances',
             method: 'POST',
             contentType: 'application/json',
-            data: JSON.stringify({ latitude: lat, longitude: lon }),
+            data: JSON.stringify({ latitude: lat, longitude: lon, country: $('#add-country').val() || 'ES' }),
             success: function(d) {
                 if (d.airport) $('#add-airport').val(d.airport);
                 if (d.airport_km) $('#add-airport-km').val(d.airport_km);
+                if (d.capital_km != null) $('#add-capital-km').val(d.capital_km);
                 if (d.sea_km != null) $('#add-sea-km').val(d.sea_km);
                 if (d.ikea_km != null) $('#add-ikea-km').val(d.ikea_km);
                 if (d.lidl_km != null) $('#add-lidl-km').val(d.lidl_km);
-                const lidlInfo = d.lidl_km != null ? ` | Lidl: ${d.lidl_km} km` : ' | Lidl: nincs cache';
+                const extras = [];
+                if (d.capital_km != null) extras.push(`Főváros: ${d.capital_km} km`);
+                if (d.sea_km != null) extras.push(`Tenger: ${d.sea_km} km`);
+                if (d.ikea_km != null) extras.push(`IKEA: ${d.ikea_km} km`);
+                extras.push(d.lidl_km != null ? `Lidl: ${d.lidl_km} km` : 'Lidl: nincs cache');
                 setFetchStatus(
-                    `<i class="bi bi-check-circle"></i> Reptér: ${d.airport} ${d.airport_km} km | Tenger: ${d.sea_km} km | IKEA: ${d.ikea_km} km${lidlInfo}`,
+                    `<i class="bi bi-check-circle"></i> Reptér: ${d.airport} ${d.airport_km} km | ${extras.join(' | ')}`,
                     'success'
                 );
             },
@@ -641,11 +688,13 @@ function showImagePreview(file) {
  */
 function resetAddForm() {
     ['add-url', 'add-city', 'add-property-url', 'add-price', 'add-size',
-     'add-garden-m2', 'add-sea-km', 'add-airport-km', 'add-score',
+     'add-rooms', 'add-bathrooms',
+     'add-garden-m2', 'add-sea-km', 'add-capital-km', 'add-airport-km', 'add-score',
      'add-reason', 'add-original-text', 'add-description-hu', 'add-notes',
      'add-lat', 'add-lon', 'add-ikea-km', 'add-lidl-km'].forEach(function(id) {
         $('#' + id).val('');
     });
+    $('#add-country').val('ES');
     $('#add-portal').val('egyéb');
     $('#add-parking').val('ismeretlen');
     $('#add-garden').val('ismeretlen');
@@ -702,12 +751,16 @@ function fetchPropertyFromUrl(url) {
  * Fill the add form with scraped data
  */
 function fillAddFormFromData(data) {
+    if (data.country) $('#add-country').val(data.country);
     if (data.portal) $('#add-portal').val(data.portal);
     if (data.city) $('#add-city').val(data.city);
     if (data.property_url) $('#add-property-url').val(data.property_url);
     if (data.price_eur) $('#add-price').val(data.price_eur);
     if (data.size_m2) $('#add-size').val(data.size_m2);
+    if (data.rooms) $('#add-rooms').val(data.rooms);
+    if (data.bathrooms) $('#add-bathrooms').val(data.bathrooms);
     if (data.sea_km) $('#add-sea-km').val(data.sea_km);
+    if (data.capital_km != null) $('#add-capital-km').val(data.capital_km);
     if (data.parking && data.parking !== null) $('#add-parking').val(data.parking);
     if (data.garden && data.garden !== null) $('#add-garden').val(data.garden);
     if (data.airport) $('#add-airport').val(data.airport);
@@ -729,12 +782,13 @@ function geocodeCity(city) {
         url: '/api/geocode',
         method: 'POST',
         contentType: 'application/json',
-        data: JSON.stringify({ city: city }),
+        data: JSON.stringify({ city: city, country: $('#add-country').val() || 'ES' }),
         success: function(data) {
             $('#add-lat').val(data.latitude);
             $('#add-lon').val(data.longitude);
             if (data.airport) $('#add-airport').val(data.airport);
             if (data.airport_km) $('#add-airport-km').val(data.airport_km);
+            if (data.capital_km != null) $('#add-capital-km').val(data.capital_km);
             setFetchStatus('<i class="bi bi-check-circle"></i> Koordináták meghatározva: ' + data.airport + ' ' + data.airport_km + ' km', 'success');
         },
         error: function() {
@@ -758,13 +812,17 @@ function saveNewProperty() {
     }
 
     const payload = {
+        country: $('#add-country').val() || 'ES',
         portal: $('#add-portal').val(),
         city: city,
         property_url: $('#add-property-url').val().trim() || null,
         price_eur: parseInt($('#add-price').val()) || null,
         size_m2: parseInt($('#add-size').val()) || null,
+        rooms: parseInt($('#add-rooms').val()) || null,
+        bathrooms: parseInt($('#add-bathrooms').val()) || null,
         garden_m2: parseInt($('#add-garden-m2').val()) || null,
         sea_km: parseInt($('#add-sea-km').val()) || null,
+        capital_km: parseInt($('#add-capital-km').val()) || null,
         parking: $('#add-parking').val(),
         garden: $('#add-garden').val(),
         airport: $('#add-airport').val() || null,
