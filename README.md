@@ -65,7 +65,7 @@ Gmail (címke: Hírlevelek/Ingatlan)
 ### Előfeltételek
 
 - Docker és Docker Compose
-- MariaDB (lehet másik gépen is)
+- MariaDB 
 - Ollama futó példány egy elérhető modellel
 - Google Cloud projekt engedélyezett Gmail API-val
 
@@ -82,11 +82,8 @@ cd IngatlanMonitor
 cp .env.example .env
 ```
 
-Töltsd ki a `.env` fájlt — minden beállítás magyarázata ott van. A `.env`
-**nincs verziókövetve**, és soha ne is legyen: minden titok (adatbázis-jelszó,
-Telegram-token, API-kulcsok) kizárólag ide kerül. A kód és a
-`docker-compose.yml` nem tartalmaz alapértelmezett titkot — ha valami hiányzik,
-a program indulásakor beszédes hibaüzenettel áll meg.
+Töltsd ki a `.env` fájlt — minden beállítás magyarázata megtalálható. Ha valami kulcs hiányzik,
+a program indulásakor hibaüzenettel leáll.
 
 ### 3. Gmail-hozzáférés
 
@@ -170,13 +167,12 @@ kell a kódhoz nyúlni, a következő futásnál már az új szabályok érvény
 
 ## Biztonság
 
-- Titok **soha nem kerül a kódba** — minden a `.env`-ből jön, ami gitignore-olt.
+- A jelszavak a `.env` fájlban vannak tárolva, ami nem kerül verziókövetésre.
 - A `client_secret.json` és a `token.pickle` szintén kimarad a verziókövetésből.
-- A `.env.example` a kulcsok nevét és magyarázatát tartalmazza, értéket nem.
-- A kötelező beállítások hiányát a program indulásakor jelzi, nem fut tovább
-  csendben rossz konfigurációval.
+- A `.env.example` a kulcsok nevét és magyarázatát tartalmazza.
 
 ## Licenc
 
-Személyes projekt, saját használatra. Ha hasznos, nyugodtan használd
-kiindulásnak.
+MIT — lásd a [LICENSE](LICENSE) fájlt. Szabadon használható, módosítható és
+terjeszthető, a szerzői jogi megjegyzés megtartásával.
+
