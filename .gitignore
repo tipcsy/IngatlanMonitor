@@ -1,6 +1,11 @@
 # Szenzitív fájlok - NE commit-álj!
 # Secrets és API kulcsok
+# A .env MINDEN példánya kimarad; a .env.example (minta, valódi érték nélkül) marad.
+.env
+.env.*
+!.env.example
 gmail-watcher/.env
+dashboard/.env
 gmail-watcher/client_secret.json
 gmail-watcher/client_secret_new.json
 gmail-watcher/client_secret_service.json

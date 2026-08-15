@@ -23,20 +23,13 @@ from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-from db import init_db, save_property, DATA_DIR
-
-# ── .env betöltése ────────────────────────────────────────────────────────────
-
-def load_env():
-    env_file = Path(__file__).parent / ".env"
-    if env_file.exists():
-        for line in env_file.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, _, value = line.partition("=")
-                os.environ.setdefault(key.strip(), value.strip())
-
-load_env()
+# A .env betöltése az envfile importjakor megtörténik — ennek meg kell előznie
+# minden olyan modult, amelyik import-időben olvas környezeti változót (db.py).
+# A load_env újraexportálva: a régebbi segédszkriptek (test_telegram.py,
+# test_new_format.py, test_local_full.py) innen importálják. Többszöri hívás
+# ártalmatlan, a betöltés csak egyszer fut le.
+from envfile import optional, load_env  # noqa: E402,F401
+from db import init_db, save_property, DATA_DIR  # noqa: E402
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -127,8 +120,8 @@ CITY_AIRPORT_MAP = {
     "bonares": ("AGP", 160), "huelva": ("AGP", 170),
 }
 
-TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_TOKEN", "")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+TELEGRAM_TOKEN   = optional("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = optional("TELEGRAM_CHAT_ID")
 
 # Hírlevelek / nem ingatlan ajánlatok kiszűrése (tárgy alapján)
 SKIP_SUBJECT_PATTERNS = [
@@ -590,8 +583,8 @@ def load_rules(country="ES"):
         return rules_file.read_text(encoding="utf-8")
     return ""
 
-OLLAMA_URL   = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "minimax-m3:cloud")
+OLLAMA_URL   = optional("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = optional("OLLAMA_MODEL", "minimax-m3:cloud")
 
 # IKEA áruházak Spanyolországban (lat, lon, város)
 IKEA_STORES = [

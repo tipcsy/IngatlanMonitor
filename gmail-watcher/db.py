@@ -10,15 +10,19 @@ import pymysql.cursors
 from pathlib import Path
 from datetime import datetime
 
+# Ez az import tölti be a .env-et. Minden más elé kell, mert az alábbi
+# konstansok már import-időben olvassák a környezeti változókat.
+from envfile import require, optional
+
 log = logging.getLogger(__name__)
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", Path(__file__).parent.parent / "data"))
 
-DB_HOST = os.environ.get("DB_HOST", "192.168.31.104")
-DB_PORT = int(os.environ.get("DB_PORT", "3306"))
-DB_USER = os.environ.get("DB_USER", "root")
-DB_PASSWORD = os.environ.get("DB_PASSWORD", "***REMOVED***")
-DB_NAME = os.environ.get("DB_NAME", "ingatlan")
+DB_HOST = optional("DB_HOST", "localhost")
+DB_PORT = int(optional("DB_PORT", "3306"))
+DB_USER = optional("DB_USER", "ingatlan")
+DB_PASSWORD = require("DB_PASSWORD", "a MariaDB jelszava")
+DB_NAME = optional("DB_NAME", "ingatlan")
 
 AIRPORT_REGION = {
     "AGP": "Costa del Sol",

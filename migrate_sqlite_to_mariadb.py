@@ -4,18 +4,35 @@ SQLite → MariaDB adatmigráció
 Futtatás: python migrate_sqlite_to_mariadb.py
 """
 
+import os
 import sqlite3
 import pymysql
 import sys
 from pathlib import Path
 
-SQLITE_PATH = "/mnt/truenas_share/Program_Files/ingatlan-data/ingatlan.db"
+# A gyökérben lévő .env beolvasása (nincs verziókövetve — lásd .env.example).
+_env = Path(__file__).resolve().parent / ".env"
+if _env.exists():
+    for _line in _env.read_text(encoding="utf-8").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _, _v = _line.partition("=")
+            os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
 
-DB_HOST = "192.168.31.104"
-DB_PORT = 3306
-DB_USER = "root"
-DB_PASSWORD = "***REMOVED***"
-DB_NAME = "ingatlan"
+SQLITE_PATH = os.environ.get("SQLITE_PATH", "") or str(
+    Path(os.environ.get("DATA_DIR", "./data")) / "ingatlan.db"
+)
+
+DB_HOST = os.environ.get("DB_HOST", "localhost")
+DB_PORT = int(os.environ.get("DB_PORT", "3306"))
+DB_USER = os.environ.get("DB_USER", "ingatlan")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
+DB_NAME = os.environ.get("DB_NAME", "ingatlan")
+
+if not DB_PASSWORD:
+    sys.exit(
+        "Hiányzó DB_PASSWORD. Másold le a .env.example fájlt .env néven, és töltsd ki."
+    )
 
 COLUMNS = [
     "email_id", "email_date", "portal", "city", "region", "airport", "airport_km",

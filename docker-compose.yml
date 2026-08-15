@@ -6,21 +6,21 @@ services:
     image: ingatlan-watcher:latest
     container_name: ix-ingatlan
     environment:
-      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
-      OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN:?add meg a .env fajlban}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:?add meg a .env fajlban}
+      OLLAMA_URL: ${OLLAMA_URL:?add meg a .env fajlban}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-minimax-m3:cloud}
       DATA_DIR: /app/data
-      DB_HOST: ${DB_HOST:-192.168.31.104}
+      DB_HOST: ${DB_HOST:?add meg a .env fajlban}
       DB_PORT: ${DB_PORT:-3306}
-      DB_USER: ${DB_USER:-root}
-      DB_PASSWORD: ${DB_PASSWORD:-***REMOVED***}
+      DB_USER: ${DB_USER:-ingatlan}
+      DB_PASSWORD: ${DB_PASSWORD:?add meg a .env fajlban}
       DB_NAME: ${DB_NAME:-ingatlan}
     volumes:
-      - /mnt/truenas_share/Program_Files/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
-      - /mnt/truenas_share/Program_Files/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
-      - /mnt/truenas_share/Program_Files/ingatlan-data/state.json:/app/ingatlan/state.json
-      - /mnt/truenas_share/Program_Files/ingatlan-data:/app/data
+      - ${INGATLAN_DATA:?add meg a .env fajlban}/client_secret.json:/app/ingatlan/client_secret.json:ro
+      - ${INGATLAN_DATA:?add meg a .env fajlban}/token.pickle:/app/ingatlan/token.pickle
+      - ${INGATLAN_DATA:?add meg a .env fajlban}/state.json:/app/ingatlan/state.json
+      - ${INGATLAN_DATA:?add meg a .env fajlban}:/app/data
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -39,16 +39,16 @@ services:
     environment:
       DATA_DIR: /app/data
       FLASK_DEBUG: "0"
-      OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
+      OLLAMA_URL: ${OLLAMA_URL:?add meg a .env fajlban}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-minimax-m3:cloud}
-      DEEPL_API_KEY: ${DEEPL_API_KEY:-***REMOVED***}
-      DB_HOST: ${DB_HOST:-192.168.31.104}
+      DEEPL_API_KEY: ${DEEPL_API_KEY:-}
+      DB_HOST: ${DB_HOST:?add meg a .env fajlban}
       DB_PORT: ${DB_PORT:-3306}
-      DB_USER: ${DB_USER:-root}
-      DB_PASSWORD: ${DB_PASSWORD:-***REMOVED***}
+      DB_USER: ${DB_USER:-ingatlan}
+      DB_PASSWORD: ${DB_PASSWORD:?add meg a .env fajlban}
       DB_NAME: ${DB_NAME:-ingatlan}
     volumes:
-      - /mnt/truenas_share/Program_Files/ingatlan-data:/app/data
+      - ${INGATLAN_DATA:?add meg a .env fajlban}:/app/data
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -62,16 +62,16 @@ services:
     image: ingatlan-watcher:latest
     container_name: ix-simple-check
     environment:
-      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
-      OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN:?add meg a .env fajlban}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:?add meg a .env fajlban}
+      OLLAMA_URL: ${OLLAMA_URL:?add meg a .env fajlban}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-minimax-m3:cloud}
       DATA_DIR: /app/data
     volumes:
-      - /mnt/truenas_share/Program_Files/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
-      - /mnt/truenas_share/Program_Files/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
-      - /mnt/truenas_share/Program_Files/ingatlan-data/state.json:/app/ingatlan/state.json
-      - /mnt/truenas_share/Program_Files/ingatlan-data:/app/data
+      - ${INGATLAN_DATA:?add meg a .env fajlban}/client_secret.json:/app/ingatlan/client_secret.json:ro
+      - ${INGATLAN_DATA:?add meg a .env fajlban}/token.pickle:/app/ingatlan/token.pickle
+      - ${INGATLAN_DATA:?add meg a .env fajlban}/state.json:/app/ingatlan/state.json
+      - ${INGATLAN_DATA:?add meg a .env fajlban}:/app/data
     restart: "no"
     entrypoint: ["python"]
     command: ["simple_check.py"]
@@ -81,16 +81,16 @@ services:
     image: ingatlan-watcher:latest
     container_name: ix-detailed-check
     environment:
-      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
-      OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN:?add meg a .env fajlban}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:?add meg a .env fajlban}
+      OLLAMA_URL: ${OLLAMA_URL:?add meg a .env fajlban}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-minimax-m3:cloud}
       DATA_DIR: /app/data
     volumes:
-      - /mnt/truenas_share/Program_Files/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
-      - /mnt/truenas_share/Program_Files/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
-      - /mnt/truenas_share/Program_Files/ingatlan-data/state.json:/app/ingatlan/state.json
-      - /mnt/truenas_share/Program_Files/ingatlan-data:/app/data
+      - ${INGATLAN_DATA:?add meg a .env fajlban}/client_secret.json:/app/ingatlan/client_secret.json:ro
+      - ${INGATLAN_DATA:?add meg a .env fajlban}/token.pickle:/app/ingatlan/token.pickle
+      - ${INGATLAN_DATA:?add meg a .env fajlban}/state.json:/app/ingatlan/state.json
+      - ${INGATLAN_DATA:?add meg a .env fajlban}:/app/data
     restart: "no"
     entrypoint: ["python"]
     command: ["detailed_check.py"]
@@ -100,16 +100,16 @@ services:
     image: ingatlan-watcher:latest
     container_name: ix-debug-24h
     environment:
-      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
-      OLLAMA_URL: ${OLLAMA_URL:-http://192.168.31.104:30068}
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN:?add meg a .env fajlban}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:?add meg a .env fajlban}
+      OLLAMA_URL: ${OLLAMA_URL:?add meg a .env fajlban}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-minimax-m3:cloud}
       DATA_DIR: /app/data
     volumes:
-      - /mnt/truenas_share/Program_Files/ingatlan-data/client_secret.json:/app/ingatlan/client_secret.json:ro
-      - /mnt/truenas_share/Program_Files/ingatlan-data/token.pickle:/app/ingatlan/token.pickle
-      - /mnt/truenas_share/Program_Files/ingatlan-data/state.json:/app/ingatlan/state.json
-      - /mnt/truenas_share/Program_Files/ingatlan-data:/app/data
+      - ${INGATLAN_DATA:?add meg a .env fajlban}/client_secret.json:/app/ingatlan/client_secret.json:ro
+      - ${INGATLAN_DATA:?add meg a .env fajlban}/token.pickle:/app/ingatlan/token.pickle
+      - ${INGATLAN_DATA:?add meg a .env fajlban}/state.json:/app/ingatlan/state.json
+      - ${INGATLAN_DATA:?add meg a .env fajlban}:/app/data
     restart: "no"
     entrypoint: ["python"]
     command: ["debug_24h.py"]
